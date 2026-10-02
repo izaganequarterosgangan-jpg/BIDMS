@@ -1,0 +1,266 @@
+html {
+  font-size: 14px;
+}
+
+/* Shared sidebar and header styles (single source of truth)
+   Consolidated from documents.css / Blotter.css / Reports.css */
+
+.page-shell {
+  display: flex;
+  min-height: 100vh;
+  background: #f4f7fc;
+  color: #1e293b;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.sidebar {
+  width: 260px;
+  background: #0b194c;
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px 0;
+  flex-shrink: 0;
+}
+
+.sidebar-logo-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 16px;
+}
+
+.logo-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.logo-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.brand-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: white;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.brand-subtitle {
+  font-size: 11px;
+  color: #cbd5e1;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.nav-menu {
+  padding: 0 12px;
+}
+
+.menu-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #64748b;
+  margin: 8px 10px 10px;
+}
+
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nav-button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border: none;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.nav-button:hover,
+.nav-button.active {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fbbf24;
+  border-left-color: #fbbf24;
+}
+
+.nav-button.active {
+  background: transparent;
+  color: #f59e0b !important;
+  border-left-color: transparent;
+}
+
+.nav-button.active .nav-icon,
+.nav-button.active i {
+  color: #f59e0b;
+}
+
+.nav-button-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-gold {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #fbbf24;
+  color: #78350f;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+}
+
+.user-role {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.logout-button {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 20px;
+  transition: color 0.2s;
+}
+
+.logout-button:hover { color: #ef4444; }
+
+/* Header / top actions (shared) */
+.top-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; gap:20px; }
+.header-title { font-size:24px; font-weight:700; color:#0f172a; margin:0; }
+.header-subtitle { color:#64748b; font-size:13px; margin:4px 0 0; }
+.header-actions { display:flex; gap:12px; align-items:center; }
+.search-box { display:flex; align-items:center; background:white; border:1px solid #cbd5e1; border-radius:10px; padding:8px 12px; gap:8px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
+.search-box input { border:none; outline:none; background:transparent; font-size:14px; color:#0f172a; width:180px; }
+.search-icon { width:16px; height:16px; color:#64748b; }
+.action-button { border:none; background:#0b194c; color:white; padding:9px 16px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:8px; font-weight:600; font-size:14px; transition:background 0.2s; }
+.action-button:hover { background:#152766; }
+
+/* Notification styles */
+.notification-wrapper { position: relative; }
+.notif-badge { position: absolute; top: 4px; right: 4px; min-width: 18px; height: 18px; padding: 0 5px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; border: 2px solid white; }
+.notif-dropdown { position: absolute; top: 46px; right: 0; width: 340px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 6px 18px rgba(15,23,42,0.12); z-index: 1100; max-height: 420px; overflow: hidden; display: none; }
+.notif-dropdown .header { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; display:flex; align-items:center; justify-content:space-between; }
+.notif-dropdown .items { max-height: 360px; overflow-y: auto; }
+.notif-item { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+.notif-item.unread { background: #eff6ff; }
+.notif-item-content { flex: 1; min-width: 0; }
+.notif-item .title { font-weight:700; color:#0f172a; }
+.notif-item .meta { font-size:12px; color:#64748b; }
+.notif-view-btn { border:none; background:none; color:#0b194c; cursor:pointer; padding:6px; border-radius:8px; flex: 0 0 auto; line-height:1; }
+.notif-view-btn:hover { background:#e0e7ff; color:#152766; }
+.notif-item.read .notif-view-btn { color:#94a3b8; }
+.notif-empty { padding: 16px; color: #64748b; }
+
+
+@media (min-width: 768px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
+  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+}
+
+html {
+  position: relative;
+  min-height: 100%;
+}
+
+/* The 60px bottom margin was a legacy spacer that made the document itself
+   scrollbar even though the content column already scrolls on its own on the
+   desktop layout (the sidebar is pinned in documents.css). It is therefore
+   dropped for the desktop layout, and kept for the stacked mobile layout where
+   the page still scrolls normally. */
+@media (min-width: 769px) {
+  body {
+    margin-bottom: 0;
+  }
+
+  /* The content column scrolls on its own, so the document must not scroll at all.
+     Clipping the root stops any full-bleed row inside a page from adding an outer
+     horizontal scrollbar -- that scrollbar is what stole the last 15px of viewport
+     height and re-created a few pixels of vertical page scroll. `clip` rather than
+     `hidden`, because `overflow-x: hidden` forces `overflow-y` to `auto` and would
+     turn the root into a scroll container of its own. */
+  html,
+  body {
+    overflow-x: clip;
+  }
+}
+
+@media (max-width: 768px) {
+  body {
+    margin-bottom: 60px;
+  }
+}
+
+.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
+  color: var(--bs-secondary-color);
+  text-align: end;
+}
+
+.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
+  text-align: start;
+}

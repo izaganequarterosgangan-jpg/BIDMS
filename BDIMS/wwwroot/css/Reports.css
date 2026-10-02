@@ -1,0 +1,357 @@
+﻿* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background: #f4f7fc;
+    color: #1e293b;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* Sidebar, nav, and header visuals are centralized in site.css
+   Reports-specific rules below only affect content-area visuals. */
+
+/* Main Layout */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 28px;
+}
+
+.top-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.header-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.header-subtitle {
+    color: #64748b;
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.search-box {
+    display: flex;
+    align-items: center;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 8px 12px;
+    gap: 8px;
+}
+
+    /* search-box input centralized in site.css */
+
+.action-button { /* centralized in site.css */ }
+
+.secondary-btn {
+    border: none;
+    background: #e2e8f0;
+    color: #1e293b;
+    padding: 9px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: opacity 0.2s ease;
+}
+
+    .secondary-btn:hover {
+        background: #cbd5e1;
+    }
+
+.content-area {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.hero-card {
+    background: white;
+    padding: 20px;
+    border-radius: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+}
+
+.eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+}
+
+.hero-card h3 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.hero-card p {
+    color: #64748b;
+    font-size: 14px;
+}
+
+.pill {
+    background: #e0f2fe;
+    color: #075985;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.mini-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+    .mini-card.warning {
+        background: #fff7ed;
+        border-color: #fdba74;
+    }
+
+    .mini-card.info {
+        background: #eff6ff;
+        border-color: #93c5fd;
+    }
+
+    .mini-card.success {
+        background: #ecfdf5;
+        border-color: #86efac;
+    }
+
+.mini-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.mini-card strong {
+    font-size: 20px;
+    color: #0f172a;
+}
+
+.table-card {
+    background: white;
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+}
+
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.custom-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+    .custom-table th,
+    .custom-table td {
+        text-align: left;
+        padding: 12px 8px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 14px;
+    }
+
+.report-title-cell {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-block;
+}
+
+    .status-badge.prepared, .status-badge.ready {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .status-badge.pending-review {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+/* Table Row Actions */
+.action-buttons-group {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    padding: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #64748b;
+    transition: all 0.2s ease;
+}
+
+    .icon-btn.view:hover {
+        background: #eff6ff;
+        color: #1d4ed8;
+    }
+
+    .icon-btn.delete:hover {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+.empty-table-msg {
+    text-align: center !important;
+    color: #94a3b8;
+    padding: 24px !important;
+}
+
+/* Modal Form Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 999;
+}
+
+    .modal-overlay.active {
+        opacity: 1;
+        visibility: visible;
+    }
+
+.modal-card {
+    background: white;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 450px;
+    padding: 20px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #64748b;
+}
+
+.modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+    .form-group label {
+        font-size: 13px;
+        font-weight: 600;
+        color: #334155;
+    }
+
+.modal-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    font-size: 14px;
+    outline: none;
+}
+
+    .modal-input:focus {
+        border-color: #0b194c;
+    }
+
+.modal-submit-btn {
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    border-radius: 8px;
+    background-color: #0b194c;
+    color: #ffffff;
+    cursor: pointer;
+    font-weight: 600;
+    margin-top: 6px;
+}
+
+.report-view-details {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 14px;
+}
+
+.report-placeholder-text {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+    color: #64748b;
+    line-height: 1.5;
+}

@@ -1,0 +1,422 @@
+﻿@model BDIMS.Models.DocumentsViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Documents";
+}
+
+<header class="top-header">
+    <div>
+        <h2 class="header-title">Documents</h2>
+        <p class="header-subtitle">Incoming document request queue - review submissions, approve, then issue the certificate.</p>
+    </div>
+    <div class="header-actions">
+        <form asp-controller="Home" asp-action="Documents" method="get" class="search-box">
+            <i class="bi bi-search text-muted"></i>
+            <input type="text" name="searchQuery" value="@Model.SearchQuery" placeholder="Search documents..." onchange="this.form.submit();" />
+        </form>
+        <button type="button" class="action-button" data-bs-toggle="modal" data-bs-target="#newRequestModal">
+            <i class="bi bi-plus-lg"></i> New Request
+        </button>
+    </div>
+</header>
+
+<div class="content-area">
+    <div class="hero-card">
+        <div>
+            <p class="eyebrow">DOCUMENT CENTER</p>
+            <h3>@Model.TotalRequests total document requests</h3>
+            <p>Online &amp; walk-in requests are tracked here - approve to bridge into certificate printing.</p>
+        </div>
+        <div class="pill">Updated today</div>
+    </div>
+
+    <div class="stats-row cols-4">
+        <div class="mini-card warning">
+            <span class="mini-label">PENDING</span>
+            <strong>@Model.PendingCount</strong>
+        </div>
+        <div class="mini-card info">
+            <span class="mini-label">IN REVIEW</span>
+            <strong>@Model.InReviewCount</strong>
+        </div>
+        <div class="mini-card success">
+            <span class="mini-label">APPROVED</span>
+            <strong>@Model.ApprovedCount</strong>
+        </div>
+        <div class="mini-card danger">
+            <span class="mini-label">REJECTED</span>
+            <strong>@Model.RejectedCount</strong>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-header">
+            <h4 class="mb-0 fw-bold fs-5">Recent Requests</h4>
+            <a asp-controller="Home" asp-action="Certificates" class="secondary-btn">View Certificates</a>
+        </div>
+        <div class="table-responsive">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>Request ID</th>
+                        <th>Document</th>
+                        <th>Resident</th>
+                        <th>Purpose</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Requests.Any())
+                    {
+                        @foreach (var item in Model.Requests)
+                        {
+                            string statusClass = item.Status switch
+                            {
+                                "Approved" => "status-approved",
+                                "Rejected" => "status-rejected",
+                                "Pending" => "status-pending",
+                                "In Review" => "status-inreview",
+                                "Processing" => "status-processing",
+                                _ => "status-processing"
+                            };
+
+                            <tr data-request-id="@item.Id"
+                                data-resident="@item.Resident"
+                                data-doc-title="@item.Title"
+                                data-doc-status="@item.Status">
+                                <td><strong>@item.Id</strong></td>
+                                <td>@item.Title</td>
+                                <td>@item.Resident</td>
+                                <td><span class="cell-truncate" title="@item.Purpose">@item.Purpose</span></td>
+                                <td>@item.Date</td>
+                                <td>
+                                    <span class="status-pill @statusClass">@item.Status</span>
+                                </td>
+                                <td>
+                                    <div class="action-cell">
+                                        <button type="button" class="icon-btn preview"
+                                                data-action="view-doc"
+                                                title="View Details">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <button type="button" class="icon-btn edit"
+                                                data-action="edit-doc"
+                                                title="Update Status">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        @if (item.Status == "Approved")
+                                        {
+                                            <a class="icon-btn approve" title="Issue Certificate"
+                                               href="@Url.Action("Certificates", "Home", new { issue = "true", resident = item.Resident, title = item.Title, purpose = item.Purpose })">
+                                                <i class="bi bi-award"></i>
+                                            </a>
+                                        }
+                                        <button type="button" class="icon-btn danger"
+                                                data-action="delete-doc"
+                                                title="Delete Request">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">No records found. Click <strong>New Request</strong> to add your first real request.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@* Create New Document Request *@
+<div class="modal fade" id="newRequestModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold"><i class="bi bi-file-earmark-plus"></i> Create New Document Request</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-controller="Home" asp-action="CreateDocumentRequest" method="post" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="modal-body d-flex flex-column gap-3">
+                    <div>
+                        <label class="form-label fw-semibold">Resident Full Name</label>
+                        <input type="text" name="resident" class="form-control" list="residentsDatalist"
+                               placeholder="Enter resident full name" autocomplete="off" required value="@Model.PrefillResident" />
+                        <datalist id="residentsDatalist">
+                            @foreach (var r in Model.Residents)
+                            {
+                                <option value="@r.Name">@r.Purok</option>
+                            }
+                        </datalist>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Document Type</label>
+                        <select name="title" class="form-select" required>
+                            <option value="" disabled selected="@(string.IsNullOrEmpty(Model.PrefillTitle))">Select document type...</option>
+                            <optgroup label="Barangay Certificates">
+                                @foreach (var cert in Model.CertificateTypes)
+                                {
+                                    <option value="@cert.Type" selected="@(cert.Type == Model.PrefillTitle)">@cert.Type</option>
+                                }
+                            </optgroup>
+                            @if (Model.GeneralDocumentTypes.Any())
+                            {
+                                <optgroup label="Other Request Documents">
+                                    @foreach (var g in Model.GeneralDocumentTypes)
+                                    {
+                                        <option value="@g" selected="@(g == Model.PrefillTitle)">@g</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Purpose / Notes</label>
+                        <textarea name="purpose" rows="3" class="form-control" placeholder="e.g. For Scholarship, For Local Employment, For PAO Legal Assistance" required>@Model.PrefillPurpose</textarea>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Supporting Attachments</label>
+                        <input type="file" name="attachment" class="form-control" accept=".pdf,image/png,image/jpeg,image/jpg"
+                               aria-describedby="attachHelp" />
+                        <div class="form-text" id="attachHelp">Optional: Valid ID, Cedula, or Proof of Residency (max 5 MB).</div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Initial Status</label>
+                        <select name="status" class="form-select">
+                            <option value="Pending">Pending</option>
+                            <option value="In Review">In Review</option>
+                            <option value="Approved">Approved</option>
+                            <option value="Rejected">Rejected</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> Add Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* Update Status *@
+<div class="modal fade" id="editStatusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="editModalTitle">Update Request</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-controller="Home" asp-action="UpdateDocumentStatus" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="requestId" id="editRequestId" />
+                <div class="modal-body d-flex flex-column gap-2">
+                    <p class="mb-1"><strong>Resident:</strong> <span id="editResidentName"></span></p>
+                    <p class="mb-3"><strong>Document:</strong> <span id="editDocumentTitle"></span></p>
+                    <div>
+                        <label class="form-label fw-semibold">Update Status</label>
+                        <select name="newStatus" id="editStatusSelect" class="form-select">
+                            <option value="Pending">Pending</option>
+                            <option value="In Review">In Review</option>
+                            <option value="Processing">Processing</option>
+                            <option value="Approved">Approved</option>
+                            <option value="Rejected">Rejected</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="primary-modal-btn">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* View Request Details (resident info, purpose, attachment) *@
+<div class="modal fade" id="docViewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold"><i class="bi bi-file-earmark-text"></i> Request Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="docViewBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script type="application/json" id="newRequestPrefill">
+        @Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {
+            open = Model.OpenNewRequest,
+            resident = Model.PrefillResident,
+            title = Model.PrefillTitle,
+            purpose = Model.PrefillPurpose
+        }))
+    </script>
+    <script>
+        // Auto-open New Request modal when instructed by server.
+        // The prefill values come from the query string, so they are read from a JSON
+        // island rather than interpolated into JavaScript string literals: Razor escapes
+        // HTML entities inside a <script> block but the browser does not decode them
+        // there, which mangles values, and a literal closing script tag in the input
+        // would end the block early.
+        (function() {
+            var prefill = {};
+            try {
+                prefill = JSON.parse(document.getElementById('newRequestPrefill').textContent) || {};
+            } catch (e) {
+                return;
+            }
+            if (String(prefill.open).toLowerCase() !== 'true') {
+                return;
+            }
+            var modalEl = document.getElementById('newRequestModal');
+            if (!modalEl) { return; }
+            var modal = new bootstrap.Modal(modalEl);
+            if (prefill.resident) {
+                var input = modalEl.querySelector('input[name="resident"]');
+                if (input) input.value = prefill.resident;
+            }
+            if (prefill.title) {
+                var select = modalEl.querySelector('select[name="title"]');
+                if (select) select.value = prefill.title;
+            }
+            if (prefill.purpose) {
+                var ta = modalEl.querySelector('textarea[name="purpose"]');
+                if (ta) ta.value = prefill.purpose;
+            }
+            modal.show();
+        })();
+
+        // Delegated so resident name and document title are read from data attributes
+        // instead of being embedded in an inline onclick handler, where Razor's HTML
+        // encoding does not protect the surrounding JavaScript string literal.
+        document.addEventListener('click', function (event) {
+            var button = event.target.closest('[data-action]');
+            if (!button) { return; }
+            var row = button.closest('tr[data-request-id]');
+            if (!row) { return; }
+            var id = row.getAttribute('data-request-id') || '';
+            if (button.getAttribute('data-action') === 'view-doc') {
+                openDocView(id);
+            } else if (button.getAttribute('data-action') === 'edit-doc') {
+                openEditModal(
+                    id,
+                    row.getAttribute('data-resident') || '',
+                    row.getAttribute('data-doc-title') || '',
+                    row.getAttribute('data-doc-status') || '');
+            } else if (button.getAttribute('data-action') === 'delete-doc') {
+                deleteDocRequest(id, row);
+            }
+        });
+
+        // Removes a request over AJAX after an explicit confirmation, so only that row
+        // disappears; the table markup, header, badges and other rows are untouched.
+        function deleteDocRequest(id, row) {
+            if (!window.confirm('Delete request ' + id + '? This cannot be undone.')) {
+                return;
+            }
+
+            postJson('/Home/DeleteDocumentRequest', 'id=' + encodeURIComponent(id))
+                .then(function (r) {
+                    if (r.status !== 200) { throw new Error('delete failed'); }
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data && data.success) {
+                        if (row) { row.remove(); }
+                        showToast('Document request ' + id + ' deleted.', 'success');
+                    } else {
+                        showToast('Unable to delete request.', 'danger');
+                    }
+                })
+                .catch(function () {
+                    showToast('Unable to delete request.', 'danger');
+                });
+        }
+
+        function openEditModal(id, resident, title, status) {
+            document.getElementById('editModalTitle').innerText = 'Update Request: ' + id;
+            document.getElementById('editRequestId').value = id;
+            document.getElementById('editResidentName').innerText = resident;
+            document.getElementById('editDocumentTitle').innerText = title;
+            document.getElementById('editStatusSelect').value = status;
+
+            var modal = new bootstrap.Modal(document.getElementById('editStatusModal'));
+            modal.show();
+        }
+
+        function openDocView(id) {
+            fetch('/Home/GetDocumentRequest?id=' + encodeURIComponent(id))
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d || !d.success) { showToast('Unable to load request details.', 'danger'); return; }
+                    renderDocView(d.item);
+                })
+                .catch(function () { showToast('Unable to load request details.', 'danger'); });
+        }
+
+        function statusPillClass(status) {
+            switch (String(status || '')) {
+                case 'Approved': return 'status-approved';
+                case 'Rejected': return 'status-rejected';
+                case 'Pending': return 'status-pending';
+                case 'In Review': return 'status-inreview';
+                default: return 'status-processing';
+            }
+        }
+
+        function renderDocView(doc) {
+            var html =
+                '<div class="req-detail">' +
+                    '<div class="detail-row"><span class="detail-label">Request ID</span><strong>' + escapeHtml(doc.id) + '</strong></div>' +
+                    '<div class="detail-row"><span class="detail-label">Document Type</span><strong>' + escapeHtml(doc.title) + '</strong></div>' +
+                    '<div class="detail-row"><span class="detail-label">Resident</span><strong>' + escapeHtml(doc.resident) + '</strong></div>' +
+                    '<div class="detail-row"><span class="detail-label">Date Filed</span><strong>' + escapeHtml(doc.date) + '</strong></div>' +
+                    '<div class="detail-row"><span class="detail-label">Status</span><span class="status-pill ' + statusPillClass(doc.status) + '">' + escapeHtml(doc.status) + '</span></div>' +
+                    '<div class="detail-row"><span class="detail-label">Purpose / Notes</span><div class="purpose-text">' + escapeHtml(doc.purpose) + '</div></div>' +
+                    '<div class="detail-row"><span class="detail-label">Attachment</span><div class="attachment-preview">' + attachmentHtml(doc) + '</div></div>' +
+                '</div>';
+
+            document.getElementById('docViewBody').innerHTML = html;
+            var modal = new bootstrap.Modal(document.getElementById('docViewModal'));
+            modal.show();
+        }
+
+        function attachmentHtml(doc) {
+            if (!doc.attachmentUrl || doc.attachmentUrl.length === 0) {
+                return '<span class="text-muted"><i class="bi bi-dash-circle me-1"></i>No attachment provided</span>';
+            }
+            // attachmentUrl embeds the client-declared Content-Type, so it must be
+            // restricted to a well-formed data: URI and then attribute-escaped before it
+            // is interpolated into markup. Without this a mime of
+            // image/x" onerror="... closes the attribute and injects a handler.
+            var url = String(doc.attachmentUrl);
+            if (!/^data:(?:[a-z0-9.+-]+\/[a-z0-9.+-]+)?;base64,[A-Za-z0-9+/=]*$/i.test(url)) {
+                return '<span class="text-muted"><i class="bi bi-exclamation-triangle me-1"></i>Attachment could not be displayed</span>';
+            }
+            var safeUrl = escapeHtml(url);
+            var isImage = (doc.attachmentMime || '').indexOf('image/') === 0;
+            var name = escapeHtml(doc.attachmentFileName || 'attachment');
+            if (isImage) {
+                return '<img src="' + safeUrl + '" class="attachment-image" alt="' + name + '" />' +
+                       '<div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="' + safeUrl + '" download="' + name + '">' +
+                       '<i class="bi bi-download me-1"></i>Download ' + name + '</a></div>';
+            }
+            return '<a class="download-link" href="' + safeUrl + '" download="' + name + '">' +
+                   '<i class="bi bi-paperclip me-1"></i>Download ' + name + '</a>';
+        }
+    </script>
+}

@@ -1,0 +1,953 @@
+﻿@model BDIMS.Models.ResidentsViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Residents";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/residents.css" asp-append-version="true" />
+}
+
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h3 class="fw-bold mb-0">Resident Registry</h3>
+        <p class="text-muted small mb-0" id="totalSubtitle">@Model.TotalResidents total registered residents</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-outline-success d-flex align-items-center gap-2 px-3 fw-semibold" onclick="exportCSV()">
+            <i class="bi bi-file-earmark-spreadsheet"></i>
+            <span>Export Excel/CSV</span>
+        </button>
+        <button class="btn btn-outline-dark d-flex align-items-center gap-2 px-3 fw-semibold" onclick="printMasterList()">
+            <i class="bi bi-printer"></i>
+            <span>Print Master List</span>
+        </button>
+        @* Bulk CSV import. Uses the identical button classes as the toolbar buttons
+           above (d-flex align-items-center gap-2 px-3 fw-semibold) so its height,
+           border-radius and padding match them exactly; only the colour variant differs. *@
+        <button class="btn btn-outline-primary d-flex align-items-center gap-2 px-3 fw-semibold" onclick="openImportModal()">
+            <i class="bi bi-upload"></i>
+            <span>Import CSV</span>
+        </button>
+        <button class="btn btn-dark d-flex align-items-center gap-2 px-3 fw-semibold" onclick="openAddModal()">
+            <i class="bi bi-plus-lg"></i>
+            <span>Add Resident</span>
+        </button>
+    </div>
+</div>
+
+<!-- Metric Cards -->
+<div class="row g-3 mb-4" id="statCards">
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm p-3 stat-clickable" data-stat="total" onclick="applyCardFilter('total')">
+            <h3 class="fw-bold text-primary mb-0" id="totalCount">@Model.TotalResidents</h3>
+            <span class="text-muted small">Total</span>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm p-3 stat-clickable" data-stat="active" onclick="applyCardFilter('active')">
+            <h3 class="fw-bold text-success mb-0" id="activeCount">@Model.ActiveResidents</h3>
+            <span class="text-muted small">Active</span>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm p-3 stat-clickable" data-stat="voters" onclick="applyCardFilter('voters')">
+            <h3 class="fw-bold text-purple mb-0" id="voterCount">@Model.RegisteredVoters</h3>
+            <span class="text-muted small">Registered Voters</span>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm p-3 stat-clickable" data-stat="seniors" onclick="applyCardFilter('seniors')">
+            <h3 class="fw-bold text-warning mb-0" id="seniorCount">@Model.SeniorCitizens</h3>
+            <span class="text-muted small">Senior Citizens</span>
+        </div>
+    </div>
+    <div class="col-12 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="metric-chip" data-stat="male" onclick="applyCardFilter('male')" role="button" title="Filter by Male">
+                    <strong class="fw-bold text-info d-block" id="maleCount">@Model.MaleCount</strong>
+                    <small class="text-muted">Male</small>
+                </span>
+                <span class="metric-divider"></span>
+                <span class="metric-chip" data-stat="female" onclick="applyCardFilter('female')" role="button" title="Filter by Female">
+                    <strong class="fw-bold text-danger d-block" id="femaleCount">@Model.FemaleCount</strong>
+                    <small class="text-muted">Female</small>
+                </span>
+            </div>
+            <span class="text-muted small">Demographics</span>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body p-3">
+        <div class="d-flex flex-wrap align-items-end gap-2">
+            <div class="flex-grow-1" style="min-width: 220px;">
+                <label class="filter-label">Search</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="text" id="searchInput" oninput="renderTable()" placeholder="Search by name or ID..." class="form-control" />
+                </div>
+            </div>
+            <div style="min-width: 140px;">
+                <label class="filter-label">Purok</label>
+                <select id="filterPurok" class="form-select form-select-sm" onchange="renderTable()">
+                    <option value="">All Puroks</option>
+                    <option>Purok 1</option>
+                    <option>Purok 2</option>
+                    <option>Purok 3</option>
+                    <option>Purok 4</option>
+                    <option>Purok 5</option>
+                    <option>Purok 6</option>
+                    <option>Purok 7</option>
+                    <option>Purok 8</option>
+                </select>
+            </div>
+            <div style="min-width: 140px;">
+                <label class="filter-label">Sex</label>
+                <select id="filterSex" class="form-select form-select-sm" onchange="renderTable()">
+                    <option value="">All Sexes</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+            </div>
+            <div style="min-width: 160px;">
+                <label class="filter-label">Voter Status</label>
+                <select id="filterVoter" class="form-select form-select-sm" onchange="renderTable()">
+                    <option value="">All</option>
+                    <option value="true">Registered Voters</option>
+                    <option value="false">Non-Voters</option>
+                </select>
+            </div>
+            <div style="min-width: 140px;">
+                <label class="filter-label">Status</label>
+                <select id="filterStatus" class="form-select form-select-sm" onchange="renderTable()">
+                    <option value="">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                </select>
+            </div>
+            <div>
+                <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" onclick="resetFilters()">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<datalist id="purokOptions">
+    <option value="Purok 1"></option>
+    <option value="Purok 2"></option>
+    <option value="Purok 3"></option>
+    <option value="Purok 4"></option>
+    <option value="Purok 5"></option>
+    <option value="Purok 6"></option>
+    <option value="Purok 7"></option>
+    <option value="Purok 8"></option>
+</datalist>
+
+<!-- Table Card -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="residentsTable">
+                <thead class="table-light">
+                    <tr class="text-muted small">
+                        <th>RESIDENT ID</th>
+                        <th>FULL NAME</th>
+                        <th>AGE / SEX</th>
+                        <th>PUROK</th>
+                        <th>CONTACT</th>
+                        <th>VOTER</th>
+                        <th>STATUS</th>
+                        <th class="text-end">ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody class="small">
+                    @* Rendered only when the registry is genuinely empty. The id gives the
+                       script a stable hook so the placeholder can be removed the moment an
+                       Add / CSV import puts a real row into the table, instead of sitting
+                       above the first resident. *@
+                    @if (!Model.Residents.Any())
+                    {
+                        <tr id="residentEmptyState">
+                            <td colspan="7" class="text-center py-5">
+                                <div class="d-flex flex-column align-items-center gap-2">
+                                    <i class="bi bi-people fs-1 text-muted"></i>
+                                    <p class="fw-semibold mb-0">No residents yet</p>
+                                    <p class="text-muted small mb-2">Click <strong>Add Resident</strong> to register your first real resident.</p>
+                                    <button class="btn btn-dark d-flex align-items-center gap-2 px-3 fw-semibold" onclick="openAddModal()">
+                                        <i class="bi bi-plus-lg"></i>
+                                        <span>Add Resident</span>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var resident in Model.Residents)
+                    {
+                        <tr data-name="@resident.Name.ToLower()"
+                            data-id="@resident.Id"
+                            data-purok="@resident.Purok"
+                            data-sex="@resident.Sex"
+                            data-voter="@resident.IsVoter.ToString().ToLower()"
+                            data-status="@resident.Status"
+                            data-age="@(resident.AgeSex.Split('/')[0].Trim())">
+                            <td class="fw-bold text-secondary">@resident.Id</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="avatar-circle @resident.AvatarClass">
+                                        @resident.Initials
+                                    </div>
+                                    <div>
+                                        <p class="fw-bold mb-0">@resident.Name</p>
+                                        <small class="text-muted d-block" style="font-size: 10px;">Since @resident.Since</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>@resident.AgeSex</td>
+                            <td>@resident.Purok</td>
+                            <td>@resident.Contact</td>
+                            <td>
+                                @if (resident.IsVoter)
+                                {
+                                    <span class="text-success fw-semibold"><i class="bi bi-check-lg"></i> Registered</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="status-badge @(resident.Status == "Active" ? "status-active" : "status-inactive")">
+                                    <span class="status-dot @(resident.Status == "Active" ? "status-dot-active" : "status-dot-inactive")"></span>
+                                    @resident.Status
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-action" title="View" aria-label="View" onclick="openViewModal(this)"><i class="bi bi-eye"></i></button>
+                                <button class="btn btn-sm btn-action" title="Edit" aria-label="Edit" onclick="openEditModal(this)"><i class="bi bi-pencil"></i></button>
+                                <button class="btn btn-sm btn-action btn-action-danger" title="Delete" aria-label="Delete" onclick="deleteResident(this)"><i class="bi bi-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+            <span id="paginationInfo" class="text-muted small">Showing 1 to 10 of @Model.TotalResidents entries</span>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary" id="prevPageBtn" onclick="changePage(-1)">Previous</button>
+                <button class="btn btn-outline-secondary" id="nextPageBtn" onclick="changePage(1)">Next</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const PAGE_SIZE = 10;
+        let currentPage = 1;
+        let seniorOnly = false;
+
+        function collectRows() {
+            // The empty-state placeholder lives in the same <tbody> as the data rows, so
+            // it has to be excluded explicitly. Counting it as a resident would inflate
+            // the pagination total, and because it carries no data-* attributes it also
+            // failed every filter - which is what left it stranded on screen above the
+            // imported rows.
+            return Array.from(document.querySelectorAll('#residentsTable tbody tr'))
+                .filter(tr => tr.id !== 'residentEmptyState' && tr.dataset.id);
+        }
+
+        // Removes the "No residents yet" placeholder once real rows exist. Safe to call
+        // at any time; it simply does nothing when the placeholder is already gone.
+        function hideEmptyState() {
+            const placeholder = document.getElementById('residentEmptyState');
+            if (placeholder) placeholder.remove();
+        }
+
+        const STANDARD_PUROKS = ['Purok 1', 'Purok 2', 'Purok 3', 'Purok 4', 'Purok 5', 'Purok 6', 'Purok 7', 'Purok 8'];
+
+        function collectPuroks() {
+            const set = new Set(STANDARD_PUROKS);
+            collectRows().forEach(tr => {
+                if (tr.dataset.purok) set.add(tr.dataset.purok);
+            });
+            return Array.from(set).sort((a, b) => {
+                const na = parseInt(String(a).replace(/\D/g, ''), 10) || 0;
+                const nb = parseInt(String(b).replace(/\D/g, ''), 10) || 0;
+                return na - nb || String(a).localeCompare(String(b));
+            });
+        }
+
+        function refreshPurokOptions() {
+            const puroks = collectPuroks();
+            const sel = document.getElementById('filterPurok');
+            const current = sel.value;
+            sel.innerHTML = '<option value="">All Puroks</option>';
+            puroks.forEach(p => {
+                const o = document.createElement('option');
+                o.value = p;
+                o.textContent = p;
+                sel.appendChild(o);
+            });
+            if (current) sel.value = current;
+
+            const dl = document.getElementById('purokOptions');
+            dl.innerHTML = '';
+            puroks.forEach(p => {
+                const o = document.createElement('option');
+                o.value = p;
+                dl.appendChild(o);
+            });
+        }
+
+        function getFilters() {
+            return {
+                search: (document.getElementById('searchInput').value || '').toLowerCase().trim(),
+                purok: document.getElementById('filterPurok').value,
+                sex: document.getElementById('filterSex').value,
+                voter: document.getElementById('filterVoter').value,
+                status: document.getElementById('filterStatus').value
+            };
+        }
+
+        function rowMatches(f, tr) {
+            const name = (tr.dataset.name || '').toLowerCase();
+            const id = (tr.dataset.id || '').toLowerCase();
+            const purok = tr.dataset.purok || '';
+            const sex = tr.dataset.sex || '';
+            const voter = tr.dataset.voter || '';
+            const status = tr.dataset.status || '';
+            const age = parseInt(tr.dataset.age, 10) || 0;
+
+            if (seniorOnly && age < 60) return false;
+            if (f.search && name.indexOf(f.search) === -1 && id.indexOf(f.search) === -1) return false;
+            if (f.purok && purok !== f.purok) return false;
+            if (f.sex && sex !== f.sex) return false;
+            if (f.voter !== '' && voter !== f.voter) return false;
+            if (f.status && status !== f.status) return false;
+            return true;
+        }
+
+        function renderTable() {
+            const rows = collectRows();
+            const f = getFilters();
+            const matched = rows.filter(tr => rowMatches(f, tr));
+            const total = matched.length;
+            const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+            if (currentPage > pages) currentPage = pages;
+            if (currentPage < 1) currentPage = 1;
+
+            const start = (currentPage - 1) * PAGE_SIZE;
+            const end = Math.min(start + PAGE_SIZE, total);
+            const pageRows = matched.slice(start, end);
+
+            rows.forEach(tr => tr.style.display = 'none');
+            pageRows.forEach(tr => tr.style.display = '');
+
+            const info = document.getElementById('paginationInfo');
+            if (total === 0) info.textContent = 'Showing 0 to 0 of 0 entries';
+            else info.textContent = 'Showing ' + (start + 1) + ' to ' + end + ' of ' + total + ' entries';
+
+            document.getElementById('prevPageBtn').disabled = currentPage <= 1;
+            document.getElementById('nextPageBtn').disabled = currentPage >= pages;
+
+            updateCardStates(f);
+        }
+
+        function changePage(delta) {
+            currentPage += delta;
+            renderTable();
+        }
+
+        function resetFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('filterPurok').value = '';
+            document.getElementById('filterSex').value = '';
+            document.getElementById('filterVoter').value = '';
+            document.getElementById('filterStatus').value = '';
+            seniorOnly = false;
+            currentPage = 1;
+            renderTable();
+        }
+
+        // Refreshes the metric cards after an AJAX add / edit / delete. The counts
+        // come straight from the controller (fresh Residents table query), so the
+        // numbers match the database without a page navigation. Only textContent is
+        // written, so no class, colour, grid or layout markup is touched.
+        //
+        // If a response ever arrives without the summary block (for example an older
+        // server build), fall back to reloading the page so the Razor view re-queries
+        // the database and re-renders the cards instead of leaving stale numbers on
+        // screen. This is the standard-submit fallback, so the cards can never be
+        // left out of date after an edit.
+        function updateMetricCards(counts) {
+            if (!counts) {
+                window.location.reload();
+                return;
+            }
+            const map = {
+                totalCount: counts.total,
+                activeCount: counts.active,
+                voterCount: counts.voters,
+                seniorCount: counts.seniors,
+                maleCount: counts.male,
+                femaleCount: counts.female
+            };
+            Object.keys(map).forEach(function (id) {
+                const el = document.getElementById(id);
+                if (el && map[id] !== undefined && map[id] !== null) {
+                    el.textContent = map[id];
+                }
+            });
+
+            const subtitle = document.getElementById('totalSubtitle');
+            if (subtitle && counts.total !== undefined) {
+                subtitle.textContent = counts.total + ' total registered residents';
+            }
+        }
+
+        function applyCardFilter(type) {
+            resetFilters();
+            switch (type) {
+                case 'active': document.getElementById('filterStatus').value = 'Active'; break;
+                case 'voters': document.getElementById('filterVoter').value = 'true'; break;
+                case 'seniors': seniorOnly = true; break;
+                case 'male': document.getElementById('filterSex').value = 'Male'; break;
+                case 'female': document.getElementById('filterSex').value = 'Female'; break;
+            }
+            renderTable();
+        }
+
+        function updateCardStates(f) {
+            const clean = s => s === '';
+            const isDefault = clean(f.purok) && clean(f.sex) && clean(f.voter) && clean(f.status) && !seniorOnly && !f.search;
+            let active = null;
+            if (isDefault) active = 'total';
+            else if (seniorOnly) active = 'seniors';
+            else if (clean(f.purok) && clean(f.sex) && clean(f.voter) && f.status === 'Active') active = 'active';
+            else if (clean(f.purok) && clean(f.sex) && clean(f.status) && f.voter === 'true') active = 'voters';
+            else if (clean(f.purok) && clean(f.voter) && clean(f.status) && f.sex === 'Male') active = 'male';
+            else if (clean(f.purok) && clean(f.voter) && clean(f.status) && f.sex === 'Female') active = 'female';
+
+            document.querySelectorAll('#statCards [data-stat]').forEach(el => {
+                el.classList.toggle('is-active', el.dataset.stat === active);
+            });
+        }
+
+        function filteredRows() {
+            const f = getFilters();
+            return collectRows().filter(tr => rowMatches(f, tr));
+        }
+
+        function exportCSV() {
+            const rows = filteredRows();
+            if (rows.length === 0) { showToast('No residents to export.', 'warning'); return; }
+            const headers = ['Resident ID', 'Full Name', 'Age/Sex', 'Purok', 'Contact', 'Voter', 'Status'];
+            const lines = [headers.join(',')];
+            rows.forEach(tr => {
+                const voter = tr.dataset.voter === 'true' ? 'Registered' : 'Non-Voter';
+                const cells = [
+                    tr.dataset.id,
+                    tr.querySelector('td:nth-child(2)').innerText.trim(),
+                    tr.querySelector('td:nth-child(3)').innerText.trim(),
+                    tr.dataset.purok,
+                    tr.querySelector('td:nth-child(5)').innerText.trim(),
+                    voter,
+                    tr.dataset.status
+                ];
+                lines.push(cells.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(','));
+            });
+            const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'residents-master-list.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Master list exported to CSV.', 'success');
+        }
+
+        function printMasterList() {
+            const rows = filteredRows();
+            if (rows.length === 0) { showToast('No residents to print.', 'warning'); return; }
+            const headers = ['Resident ID', 'Full Name', 'Age/Sex', 'Purok', 'Contact', 'Voter', 'Status'];
+            let html = '<html><head><title>Barangay Resident Master List</title><style>';
+            html += 'body{font-family:"Segoe UI",Arial,sans-serif;margin:24px;color:#0f172a;}';
+            html += 'h1{font-size:18px;margin:0 0 4px;}p.sub{color:#475569;font-size:12px;margin:0 0 16px;}';
+            html += 'table{width:100%;border-collapse:collapse;font-size:11px;}';
+            html += 'th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:left;}';
+            html += 'th{background:#f1f5f9;text-transform:uppercase;font-size:10px;letter-spacing:.05em;}';
+            html += '@@media print{@@page{size:landscape}}';
+            html += '</style></' + 'head><body>';
+            html += '<h1>Barangay Resident Master List</h1>';
+            html += '<p class="sub">Generated ' + new Date().toLocaleString() + ' &middot; ' + rows.length + ' resident(s)</p>';
+            html += '<table><thead><tr>';
+            html += headers.map(h => '<th>' + escapeHtml(h) + '</th>').join('');
+            html += '</tr></thead><tbody>';
+            rows.forEach(tr => {
+                const voter = tr.dataset.voter === 'true' ? 'Registered' : 'Non-Voter';
+                html += '<tr>'
+                    + '<td>' + escapeHtml(tr.dataset.id) + '</td>'
+                    + '<td>' + escapeHtml(tr.querySelector('td:nth-child(2)').innerText.trim()) + '</td>'
+                    + '<td>' + escapeHtml(tr.querySelector('td:nth-child(3)').innerText.trim()) + '</td>'
+                    + '<td>' + escapeHtml(tr.dataset.purok) + '</td>'
+                    + '<td>' + escapeHtml(tr.querySelector('td:nth-child(5)').innerText.trim()) + '</td>'
+                    + '<td>' + escapeHtml(voter) + '</td>'
+                    + '<td>' + escapeHtml(tr.dataset.status) + '</td>'
+                    + '</tr>';
+            });
+            // The two closing tags below are concatenated at runtime so that literal
+            // closing BODY / HTML tag text never appears in the served page. The
+            // ASP.NET dev-console browser-link filter string-replaces the first
+            // closing BODY tag in a response to inject its scripts; when those
+            // tokens sat inside this print-window string, the injection landed
+            // mid-script, the injected script-close tag ended the block early,
+            // and the rest of the residents JS rendered as visible page text.
+            html += '</tbody></table></' + 'body></' + 'html>';
+            const w = window.open('', '_blank', 'width=1024,height=700');
+            if (!w) { showToast('Pop-up blocked. Please allow pop-ups.', 'danger'); return; }
+            w.document.write(html);
+            w.document.close();
+            w.focus();
+            setTimeout(function () { w.print(); }, 400);
+        }
+
+        // ------------- Add / View / Edit / Delete -------------
+
+        function buildRowHtml(item) {
+            const voter = item.isVoter
+                ? '<span class="text-success fw-semibold"><i class="bi bi-check-lg"></i> Registered</span>'
+                : '<span class="text-muted">\u2014</span>';
+            const active = item.status === 'Active';
+            return '<td class="fw-bold text-secondary">' + escapeHtml(item.id) + '</td>'
+                + '<td><div class="d-flex align-items-center gap-2">'
+                + '<div class="avatar-circle ' + escapeHtml(item.avatarClass || 'bg-amber-avatar') + '">' + escapeHtml(item.initials) + '</div>'
+                + '<div><p class="fw-bold mb-0">' + escapeHtml(item.name) + '</p>'
+                + '<small class="text-muted d-block" style="font-size: 10px;">Since ' + escapeHtml(item.since) + '</small></div></div></td>'
+                + '<td>' + escapeHtml(item.ageSex) + '</td>'
+                + '<td>' + escapeHtml(item.purok) + '</td>'
+                + '<td>' + escapeHtml(item.contact) + '</td>'
+                + '<td>' + voter + '</td>'
+                + '<td><span class="status-badge ' + (active ? 'status-active' : 'status-inactive') + '">'
+                + '<span class="status-dot ' + (active ? 'status-dot-active' : 'status-dot-inactive') + '"></span>'
+                + escapeHtml(item.status) + '</span></td>'
+                + '<td class="text-end">'
+                + '<button class="btn btn-sm btn-action" title="View" aria-label="View" onclick="openViewModal(this)"><i class="bi bi-eye"></i></button>'
+                + '<button class="btn btn-sm btn-action" title="Edit" aria-label="Edit" onclick="openEditModal(this)"><i class="bi bi-pencil"></i></button>'
+                + '<button class="btn btn-sm btn-action btn-action-danger" title="Delete" aria-label="Delete" onclick="deleteResident(this)"><i class="bi bi-trash"></i></button>'
+                + '</td>';
+        }
+
+        function attachRowData(tr, item) {
+            tr.setAttribute('data-name', (item.name || '').toLowerCase());
+            tr.setAttribute('data-id', item.id);
+            tr.setAttribute('data-purok', item.purok);
+            tr.setAttribute('data-sex', item.sex);
+            tr.setAttribute('data-voter', (item.isVoter ? 'true' : 'false'));
+            tr.setAttribute('data-status', item.status);
+            tr.setAttribute('data-age', String(item.ageSex).split('/')[0].trim());
+        }
+
+        // ------------- Bulk CSV import -------------
+
+        // Row count shown in the modal. The header line is excluded so the number
+        // matches what the user sees as data rows in their spreadsheet.
+        function csvDataRowCount(text) {
+            if (!text) return 0;
+            const lines = text.split(/\r\n|\n|\r/);
+            let count = 0;
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim() !== '') count++;
+            }
+            return count;
+        }
+
+        function openImportModal() {
+            const html = `
+                <form onsubmit="handleImportCsv(event)" class="d-grid gap-3">
+                    <div>
+                        <label class="form-label small fw-bold" for="csvFile">CSV File</label>
+                        <input type="file" id="csvFile" class="form-control form-control-sm" accept=".csv,text/csv" onchange="previewCsvFile(this)" />
+                    </div>
+                    <div id="csvPreviewInfo" class="text-muted small" style="display:none;">
+                        <i class="bi bi-file-earmark-spreadsheet"></i>
+                        <span id="csvPreviewText"></span>
+                    </div>
+                    <div>
+                        <a class="btn btn-outline-secondary btn-sm" href="/Home/ResidentCsvTemplate" download>
+                            <i class="bi bi-download"></i> Download CSV Template
+                        </a>
+                        <div class="text-muted small mt-2">
+                            Expected columns: FullName, Age, Sex, Purok, Contact, VoterStatus, Status.
+                            Only FullName is required. Rows that cannot be read are skipped and
+                            reported after the import.
+                        </div>
+                    </div>
+                    <div id="csvSkippedBox" class="text-muted small" style="display:none;"></div>
+                    <button type="submit" class="btn btn-dark btn-sm" id="csvSubmitBtn">Upload &amp; Import</button>
+                </form>
+            `;
+            openModal('Import Residents from CSV', html);
+        }
+
+        // Reads the chosen file in the browser purely to show an approximate row count
+        // before uploading. This is only a hint: the authoritative validation happens on
+        // the server, so a miscount here can never affect what is actually imported.
+        function previewCsvFile(input) {
+            const info = document.getElementById('csvPreviewInfo');
+            const text = document.getElementById('csvPreviewText');
+            const file = input.files && input.files[0];
+            if (!file) { info.style.display = 'none'; return; }
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const rows = csvDataRowCount(e.target.result);
+                text.textContent = file.name + ' — ' + rows + ' data row' + (rows === 1 ? '' : 's') + ' detected';
+                info.style.display = '';
+            };
+            reader.readAsText(file);
+        }
+
+        // Lists the rows the server refused, so a partially-bad file can be corrected.
+        // Only the first few are shown; the toast carries the true total.
+        function renderSkippedRows(skipped) {
+            const box = document.getElementById('csvSkippedBox');
+            if (!box) return;
+            if (!skipped || skipped.length === 0) { box.style.display = 'none'; return; }
+            const shown = skipped.slice(0, 8);
+            const lines = shown.map(s => 'Line ' + s.lineNumber + ': ' + s.reason);
+            if (skipped.length > shown.length) {
+                lines.push('…and ' + (skipped.length - shown.length) + ' more.');
+            }
+            box.innerHTML = '<div class="fw-bold">Skipped rows</div><ul class="mb-0 ps-3">' +
+                lines.map(t => '<li>' + escapeHtml(t) + '</li>').join('') + '</ul>';
+            box.style.display = '';
+        }
+
+        function handleImportCsv(e) {
+            e.preventDefault();
+            const input = document.getElementById('csvFile');
+            const btn = document.getElementById('csvSubmitBtn');
+            if (!input || !input.files || input.files.length === 0) {
+                showToast('Please choose a CSV file first.', 'warning');
+                return;
+            }
+
+            const form = new FormData();
+            form.append('file', input.files[0]);
+            form.append('__RequestVerificationToken', getAntiforgeryToken());
+
+            // The import is a single submit; disabling the button stops a double-click
+            // from posting the same file twice.
+            btn.disabled = true;
+            const originalLabel = btn.textContent;
+            btn.textContent = 'Importing…';
+
+            fetch('/Home/ImportCsv', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: form
+            })
+                .then(function (r) {
+                    return r.json().catch(function () {
+                        return { success: false, message: 'Unexpected server response.' };
+                    });
+                })
+                .then(function (data) {
+                    if (data && data.success) {
+                        const tbody = document.querySelector('#residentsTable tbody');
+
+                        // The placeholder must go before the new rows are appended, otherwise
+                        // it keeps sitting above them in a table that is no longer empty.
+                        hideEmptyState();
+
+                        // Imported rows are inserted back-to-front so they end up in file
+                        // order beneath the existing residents. attachRowData() and
+                        // buildRowHtml() are the same helpers the server-rendered rows and
+                        // the existing add flow already use, so the markup cannot drift.
+                        for (let i = data.imported.length - 1; i >= 0; i--) {
+                            const item = data.imported[i];
+                            const tr = document.createElement('tr');
+                            attachRowData(tr, item);
+                            tr.innerHTML = buildRowHtml(item);
+                            tbody.appendChild(tr);
+                        }
+                        refreshPurokOptions();
+                        updateMetricCards(data.counts);
+                        resetFilters();
+                        closeModal();
+
+                        let msg = data.importedCount + ' resident' + (data.importedCount === 1 ? '' : 's') +
+                                  ' imported successfully.';
+                        if (data.skippedCount > 0) {
+                            msg += ' ' + data.skippedCount + ' row' + (data.skippedCount === 1 ? '' : 's') + ' skipped.';
+                        }
+                        showToast(msg, 'success');
+                    } else {
+                        showToast((data && data.message) || 'Unable to import the CSV file.', 'danger');
+                        renderSkippedRows(data && data.skipped);
+                    }
+                })
+                .catch(function (err) {
+                    console.error(err);
+                    showToast('Unable to import the CSV file.', 'danger');
+                })
+                .finally(function () {
+                    btn.disabled = false;
+                    btn.textContent = originalLabel;
+                });
+        }
+
+        function openAddModal() {
+            const html = `
+                <form onsubmit="handleAddResident(event)" class="d-grid gap-2">
+                    <div>
+                        <label class="form-label small fw-bold">Full Name</label>
+                        <input type="text" id="addName" class="form-control form-control-sm" required placeholder="Juan dela Cruz" />
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Age</label>
+                            <input type="number" id="addAge" min="0" max="120" class="form-control form-control-sm" placeholder="35" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Sex</label>
+                            <select id="addSex" class="form-select form-select-sm">
+                                <option value="Female">Female</option>
+                                <option value="Male">Male</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Purok</label>
+                            <input type="text" list="purokOptions" id="addPurok" class="form-control form-control-sm" placeholder="e.g. Purok 1 or Purok 1B" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Contact</label>
+                            <input type="text" id="addContact" class="form-control form-control-sm" placeholder="0917 123 4567" />
+                        </div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Voter</label>
+                            <select id="addVoter" class="form-select form-select-sm">
+                                <option value="true">Registered Voter</option>
+                                <option value="false">Non-Voter</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Status</label>
+                            <select id="addStatus" class="form-select form-select-sm">
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-dark btn-sm mt-2">Save Resident</button>
+                </form>
+            `;
+            openModal('Add Resident', html);
+        }
+
+        function openViewModal(btn) {
+            const tr = btn.closest('tr');
+            const voterText = tr.dataset.voter === 'true' ? 'Registered Voter' : 'Non-Voter';
+            const active = tr.dataset.status === 'Active';
+            const html = `
+                <div class="d-grid gap-2">
+                    <div class="d-flex justify-content-between"><span class="text-muted">Resident ID</span><strong>${escapeHtml(tr.dataset.id)}</strong></div>
+                    <div class="d-flex justify-content-between"><span class="text-muted">Full Name</span><strong>${escapeHtml(tr.dataset.name)}</strong></div>
+                    <div class="d-flex justify-content-between"><span class="text-muted">Age / Sex</span><strong>${escapeHtml(tr.childNodes ? tr.querySelector('td:nth-child(3)').innerText.trim() : '')}</strong></div>
+                    <div class="d-flex justify-content-between"><span class="text-muted">Purok</span><strong>${escapeHtml(tr.dataset.purok)}</strong></div>
+                    <div class="d-flex justify-content-between"><span class="text-muted">Contact</span><strong>${escapeHtml(tr.querySelector('td:nth-child(5)').innerText.trim())}</strong></div>
+                    <div class="d-flex justify-content-between"><span class="text-muted">Voter</span><strong>${escapeHtml(voterText)}</strong></div>
+                    <div class="d-flex justify-content-between align-items-center"><span class="text-muted">Status</span><span class="status-badge ${active ? 'status-active' : 'status-inactive'}"><span class="status-dot ${active ? 'status-dot-active' : 'status-dot-inactive'}"></span>${escapeHtml(tr.dataset.status)}</span></div>
+                    <button class="btn btn-secondary btn-sm mt-3" onclick="closeModal()">Close</button>
+                </div>
+            `;
+            openModal('Resident Details', html);
+        }
+
+        function openEditModal(btn) {
+            const tr = btn.closest('tr');
+            const age = (tr.dataset.age || '').trim();
+            const sex = tr.dataset.sex;
+            const html = `
+                <form onsubmit="handleEditResident(event, '${escapeHtml(tr.dataset.id)}')" class="d-grid gap-2">
+                    <input type="hidden" id="editId" value="${escapeHtml(tr.dataset.id)}" />
+                    <div>
+                        <label class="form-label small fw-bold">Full Name</label>
+                        <input type="text" id="editName" class="form-control form-control-sm" value="${escapeHtml(tr.dataset.name)}" required />
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Age</label>
+                            <input type="number" id="editAge" min="0" max="120" class="form-control form-control-sm" value="${age}" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Sex</label>
+                            <select id="editSex" class="form-select form-select-sm">
+                                <option value="Female">Female</option>
+                                <option value="Male">Male</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Purok</label>
+                            <input type="text" list="purokOptions" id="editPurok" class="form-control form-control-sm" value="${escapeHtml(tr.dataset.purok)}" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Contact</label>
+                            <input type="text" id="editContact" class="form-control form-control-sm" value="${escapeHtml(tr.dataset.contact ? tr.dataset.contact : tr.querySelector('td:nth-child(5)').innerText.trim())}" />
+                        </div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Voter</label>
+                            <select id="editVoter" class="form-select form-select-sm">
+                                <option value="true">Registered Voter</option>
+                                <option value="false">Non-Voter</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Status</label>
+                            <select id="editStatus" class="form-select form-select-sm">
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-dark btn-sm mt-2">Save Changes</button>
+                </form>
+            `;
+            openModal('Edit ' + tr.dataset.id, html);
+            document.getElementById('editPurok').value = tr.dataset.purok;
+            document.getElementById('editSex').value = sex;
+            document.getElementById('editVoter').value = tr.dataset.voter;
+            document.getElementById('editStatus').value = tr.dataset.status;
+        }
+
+        function deleteResident(btn) {
+            const tr = btn.closest('tr');
+            const id = tr.dataset.id;
+            const name = tr.dataset.name;
+            const html = `
+                <div>
+                    <p>Are you sure you want to delete record for <strong>${escapeHtml(name)}</strong> (${escapeHtml(id)})?</p>
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button class="btn btn-light btn-sm" onclick="closeModal()">Cancel</button>
+                        <button class="btn btn-danger btn-sm" onclick="confirmDeleteResident('${escapeHtml(id)}')">Delete</button>
+                    </div>
+                </div>
+            `;
+            openModal('Confirm Delete', html);
+        }
+
+        function handleAddResident(e) {
+            e.preventDefault();
+            const body = 'name=' + encodeURIComponent(document.getElementById('addName').value.trim())
+                + '&age=' + encodeURIComponent(document.getElementById('addAge').value)
+                + '&sex=' + encodeURIComponent(document.getElementById('addSex').value)
+                + '&purok=' + encodeURIComponent(document.getElementById('addPurok').value)
+                + '&contact=' + encodeURIComponent(document.getElementById('addContact').value.trim())
+                + '&isVoter=' + encodeURIComponent(document.getElementById('addVoter').value)
+                + '&status=' + encodeURIComponent(document.getElementById('addStatus').value);
+            postJson('/Home/CreateResident', body)
+                .then(function (r) {
+                    if (r.status !== 200) throw new Error('create failed');
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data && data.success) {
+                        const tbody = document.querySelector('#residentsTable tbody');
+                        const tr = document.createElement('tr');
+                        attachRowData(tr, data.item);
+                        tr.innerHTML = buildRowHtml(data.item);
+
+                        // Same reason as the CSV import: adding the very first resident to
+                        // an empty table must also clear the placeholder.
+                        hideEmptyState();
+
+                        tbody.insertBefore(tr, tbody.firstChild);
+                        refreshPurokOptions();
+                        updateMetricCards(data.counts);
+                        resetFilters();
+                        closeModal();
+                        showToast('Resident added successfully.', 'success');
+                    } else {
+                        showToast('Unable to add resident.', 'danger');
+                    }
+                })
+                .catch(function (err) { console.error(err); showToast('Unable to add resident.', 'danger'); });
+        }
+
+        function handleEditResident(e, id) {
+            e.preventDefault();
+            const body = 'id=' + encodeURIComponent(id)
+                + '&name=' + encodeURIComponent(document.getElementById('editName').value.trim())
+                + '&age=' + encodeURIComponent(document.getElementById('editAge').value)
+                + '&sex=' + encodeURIComponent(document.getElementById('editSex').value)
+                + '&purok=' + encodeURIComponent(document.getElementById('editPurok').value)
+                + '&contact=' + encodeURIComponent(document.getElementById('editContact').value.trim())
+                + '&isVoter=' + encodeURIComponent(document.getElementById('editVoter').value)
+                + '&status=' + encodeURIComponent(document.getElementById('editStatus').value);
+            postJson('/Home/UpdateResident', body)
+                .then(function (r) {
+                    if (r.status !== 200) throw new Error('update failed');
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data && data.success) {
+                        const tr = collectRows().find(x => x.dataset.id === id);
+                        if (tr) {
+                            attachRowData(tr, data.item);
+                            tr.innerHTML = buildRowHtml(data.item);
+                        }
+                        refreshPurokOptions();
+                        updateMetricCards(data.counts);
+                        resetFilters();
+                        closeModal();
+                        showToast('Resident details updated.', 'success');
+                    } else {
+                        showToast('Unable to update resident.', 'danger');
+                    }
+                })
+                .catch(function (err) { console.error(err); showToast('Unable to update resident.', 'danger'); });
+        }
+
+        function confirmDeleteResident(id) {
+            postJson('/Home/DeleteResident', 'id=' + encodeURIComponent(id))
+                .then(function (r) {
+                    if (r.status !== 200) throw new Error('delete failed');
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (data && data.success) {
+                        const tr = collectRows().find(x => x.dataset.id === id);
+                        if (tr) tr.remove();
+                        refreshPurokOptions();
+                        updateMetricCards(data.counts);
+                        resetFilters();
+                        closeModal();
+                        showToast('Resident deleted.', 'success');
+                    } else {
+                        showToast('Unable to delete resident.', 'danger');
+                    }
+                })
+                .catch(function (err) { console.error(err); showToast('Unable to delete resident.', 'danger'); });
+        }
+
+        renderTable();
+        refreshPurokOptions();
+    </script>
+}

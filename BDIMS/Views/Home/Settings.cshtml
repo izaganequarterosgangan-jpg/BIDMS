@@ -1,0 +1,922 @@
+﻿@model BDIMS.Models.SettingsViewModel
+
+@{
+    ViewData["Title"] = "Settings";
+    Layout = "_Layout";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/settings.css" asp-append-version="true" />
+    @* The Template Manager card and the template modal use the .template-* and
+       .token-chip styles defined here; without this the placeholder palette and
+       the card layout render unstyled. *@
+    <link rel="stylesheet" href="~/css/certificatetemplate.css" asp-append-version="true" />
+}
+
+<div class="settings-page">
+    <div class="settings-body">
+
+        <!-- TOP HEADER -->
+        <div class="top-header">
+            <div class="header-title-group">
+                <h2 class="header-title">Settings</h2>
+                <p class="header-subtitle">Configure barangay operational preferences and rules.</p>
+            </div>
+
+            <div class="header-actions">
+                <!-- Save form trigger -->
+                <button type="button" class="btn-save-header" onclick="submitCurrentForm()">
+                    <i class="bi bi-floppy me-1"></i> Save Changes
+                </button>
+
+                <!-- Search Bar -->
+                <form method="get" asp-controller="Home" asp-action="Settings" class="search-box">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" name="searchQuery" placeholder="Search settings..." onchange="this.form.submit();" />
+                </form>
+
+                <!-- Notification Bell -->
+                <div class="notification-wrapper">
+                    <button class="icon-btn notification-button" title="Notifications" type="button" onclick="toggleNotifDropdown(event)">
+                        <i class="bi bi-bell"></i>
+                        <span id="notifBadgeSettings" class="notif-badge" style="display:none">0</span>
+                    </button>
+                    <div id="notifDropdown" class="notif-dropdown" aria-hidden="true"></div>
+                </div>
+
+                <!-- User Profile Initials Avatar -->
+                <div class="avatar-circle">@BDIMS.Services.UserClaims.GetInitials(User)</div>
+            </div>
+        </div>
+
+        @if (TempData["SuccessMessage"] != null)
+        {
+            <div class="toast-success">
+                <span>✓</span>
+                @TempData["SuccessMessage"]
+            </div>
+        }
+
+        @if (TempData["TemplateError"] != null)
+        {
+            <div class="toast-error">
+                <span>!</span>
+                @TempData["TemplateError"]
+            </div>
+        }
+
+        <!-- SETTINGS TABS -->
+        <div class="settings-tabs">
+            <a asp-controller="Home"
+               asp-action="Settings"
+               asp-route-tab="general"
+               class="settings-tab @(Model.ActiveTab == "general" ? "active" : "")">
+                <i class="bi bi-bank me-2"></i> Barangay Info
+            </a>
+
+            <a asp-controller="Home"
+               asp-action="Settings"
+               asp-route-tab="documents"
+               class="settings-tab @(Model.ActiveTab == "documents" ? "active" : "")">
+                <i class="bi bi-file-earmark-text me-2"></i> Certificates & Fees
+            </a>
+
+            <a asp-controller="Home"
+               asp-action="Settings"
+               asp-route-tab="security"
+               class="settings-tab @(Model.ActiveTab == "security" ? "active" : "")">
+                <i class="bi bi-shield-check me-2"></i> System & Security
+            </a>
+        </div>
+
+        <!-- CERTIFICATE TEMPLATE EDITOR ENTRY POINT -->
+        @* Compact card in the content column. It used to sit inside .header-actions, which
+           stretched the top bar and squashed the notification bell and profile badge. The
+           Dynamic Placeholders palette and the configured-template list now live in the
+           modal opened by the button below. *@
+        <div class="settings-card template-editor-card">
+            <div class="card-header card-header-with-action">
+                <div>
+                    <h2>Certificate Template Editor</h2>
+                    <p>Design the printable layout, letterhead and logos for each certificate type.</p>
+                </div>
+                <button type="button" class="btn-add-certificate template-editor-open" onclick="openTemplateEditorModal()">
+                    <i class="bi bi-magic me-1"></i> Open Template Editor
+                </button>
+            </div>
+        </div>
+
+        <!-- BARANGAY INFO TAB -->
+        @if (Model.ActiveTab == "general")
+        {
+            <form id="generalSettingsForm" asp-controller="Home" asp-action="SaveSettings" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="ActiveTab" value="general" />
+
+                <div class="settings-card">
+                    <div class="card-header border-0 pb-0">
+                        <h2>Barangay Profile & Operations</h2>
+                        <p>Manage public details displayed on printed clearances and receipts.</p>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Barangay Name</label>
+                            <input type="text" name="BarangayName" value="@Model.BarangayName" placeholder="Barangay Name" />
+                        </div>
+                        <div class="form-group">
+                            <label>Municipality / City</label>
+                            <input type="text" name="Municipality" value="@Model.Municipality" placeholder="Municipality / City" />
+                        </div>
+
+                        <div class="form-group">
+                            <label>Province</label>
+                            <input type="text" name="Province" value="@Model.Province" placeholder="Province" />
+                        </div>
+                        <div class="form-group">
+                            <label>Official Email</label>
+                            <input type="email" name="ContactEmail" value="@Model.ContactEmail" placeholder="Official Email" />
+                        </div>
+
+                        <div class="form-group">
+                            <label>Contact Phone</label>
+                            <input type="text" name="ContactPhone" value="@Model.ContactPhone" placeholder="Contact Phone" />
+                        </div>
+                        <div class="form-group">
+                            <label>Office Operating Hours</label>
+                            <input type="text" name="OfficeHours" value="@Model.OfficeHours" placeholder="8:00 AM - 5:00 PM (Mon-Fri)" />
+                        </div>
+
+                        <div class="form-group">
+                            <label>Official Document Signatory</label>
+                            <input type="text" name="SignatoryName" value="@Model.SignatoryName" placeholder="Official Document Signatory" />
+                        </div>
+                        <div class="form-group">
+                            <label>Signatory Title</label>
+                            <input type="text" name="SignatoryRole" value="@Model.SignatoryRole" placeholder="Signatory Title" />
+                        </div>
+                    </div>
+
+                    <!-- Additive action row. The form-grid above is untouched, so the
+                         field layout is identical to before; this only anchors the save
+                         control at the bottom-right of the card. -->
+                    <div class="profile-card-footer">
+                        <p class="profile-card-hint">
+                            These details print on every clearance, certificate and system header.
+                        </p>
+                        <button type="button" id="btnSaveBarangayProfile" class="btn-save-profile">
+                            <i class="bi bi-check2-circle me-1"></i> Save Profile Changes
+                        </button>
+                    </div>
+                </div>
+            </form>
+        }
+
+        <!-- CERTIFICATES TAB -->
+        @if (Model.ActiveTab == "documents")
+        {
+            <form id="documentsSettingsForm" asp-controller="Home" asp-action="SaveSettings" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="ActiveTab" value="documents" />
+
+                <div class="settings-card">
+                    <div class="card-header card-header-with-action">
+                        <div>
+                            <h2>Certificates & Fees</h2>
+                            <p>Manage certificate types, fees, and residency requirements.</p>
+                        </div>
+                        <button type="button" class="btn-add-certificate" onclick="addCertificateRow()">
+                            <i class="bi bi-plus-lg me-1"></i> Add Certificate
+                        </button>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="settings-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Certificate Type</th>
+                                    <th>Fee</th>
+                                    <th>Requires Residency</th>
+                                    <th>Status</th>
+                                    <th>Template</th>
+                                    <th>Format</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (int i = 0; i < Model.Certificates.Count; i++)
+                                {
+                                    var rowTemplate = Model.TemplateFor(Model.Certificates[i].Type);
+                                    var hasLayout = rowTemplate != null
+                                        && !string.IsNullOrWhiteSpace(rowTemplate.TemplateHtml);
+                                    <tr>
+                                        <td>
+                                            <span class="row-index">@(i + 1)</span>
+                                            <input type="hidden" name="Certificates[@i].Id" value="@Model.Certificates[i].Id" />
+                                        </td>
+                                        <td>
+                                            <input type="hidden" class="cert-type-value" name="Certificates[@i].Type" value="@Model.Certificates[i].Type" />
+                                            <strong>@Model.Certificates[i].Type</strong>
+                                        </td>
+                                        <td>
+                                            <div class="fee-input">
+                                                <span>₱</span>
+                                                <input type="number" name="Certificates[@i].Fee" value="@Model.Certificates[i].Fee" min="0" step="0.01" />
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <label class="checkbox-container">
+                                                <input type="checkbox" name="Certificates[@i].RequiresResidency" value="true" @(Model.Certificates[i].RequiresResidency ? "checked" : "") />
+                                                <span>Required</span>
+                                            </label>
+                                        </td>
+                                        <td>
+                                            <select name="Certificates[@i].Status" class="status-select" onchange="paintStatusSelect(this)">
+                                                <option value="Active" selected="@(Model.Certificates[i].Status == "Active")">Active</option>
+                                                <option value="Inactive" selected="@(Model.Certificates[i].Status == "Inactive")">Inactive</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <span class="template-status @(hasLayout ? "is-set" : "is-missing")">
+                                                @(hasLayout ? "Custom" : "Default")
+                                            </span>
+                                            <button type="button"
+                                                    class="icon-btn btn-template-cert @(hasLayout ? "" : "needs-attention")"
+                                                    title="Paste or upload the template for @Model.Certificates[i].Type"
+                                                    onclick="openTemplateModal(this)">
+                                                <i class="bi bi-file-earmark-richtext"></i>
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <textarea class="format-store" name="Certificates[@i].Format" style="display:none">@Model.Certificates[i].Format</textarea>
+                                            <button type="button" class="icon-btn btn-format-cert" title="Set legacy plain-text Format" onclick="openFormatModal(this)">
+                                                <i class="bi bi-file-earmark-text"></i>
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn-remove-cert" title="Remove" onclick="removeCertificateRow(this)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="cert-quick-add">
+                        <span class="cert-quick-label"><i class="bi bi-plus-circle me-1"></i>Quick Add</span>
+                        <input type="text" id="quickCertType" class="cert-type-input" placeholder="Certificate Type (e.g. Purok Clearance)" />
+                        <div class="fee-input quick-fee">
+                            <span>₱</span>
+                            <input type="number" id="quickCertFee" value="0" min="0" step="0.01" />
+                        </div>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="quickCertRequired" value="true" />
+                            <span>Requires Residency</span>
+                        </label>
+                        <div class="cert-quick-actions">
+                            <button type="button" class="btn-add-certificate" onclick="quickAddCertificate()">
+                                <i class="bi bi-plus-lg me-1"></i> Add
+                            </button>
+                            <button type="button" class="btn-save-quick" onclick="submitDocumentsForm()">
+                                <i class="bi bi-floppy me-1"></i> Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <!-- CERTIFICATE TEMPLATE MODAL -->
+            <div id="templateModal" class="modal fade" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                Template &mdash; <span id="templateModalType" class="template-modal-type"></span>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="templateModalForm"
+                              asp-controller="Home"
+                              asp-action="SaveCertificateTemplateForType"
+                              method="post"
+                              enctype="multipart/form-data">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" id="templateModalName" name="certificateName" value="" />
+
+                            <div class="modal-body">
+                                <p class="text-muted">
+                                    Paste your layout below, or upload a <strong>.docx</strong> /
+                                    <strong>.html</strong> file (max 8&nbsp;MB). This replaces the printable
+                                    layout for this certificate only.
+                                </p>
+
+                                <div class="template-modal-current" id="templateModalCurrent"></div>
+
+                                <label class="template-modal-label" for="templateModalText">
+                                    Paste layout
+                                </label>
+                                <div class="format-hint">
+                                    @foreach (var token in Model.TemplateTokens)
+                                    {
+                                        <button type="button"
+                                                class="token-chip"
+                                                title="@token.Description &mdash; example: @token.Sample"
+                                                onclick="copyToken('@token.Placeholder')">@token.Placeholder</button>
+                                    }
+                                </div>
+                                <textarea id="templateModalText"
+                                          class="form-control"
+                                          name="pastedHtml"
+                                          rows="12"
+                                          placeholder="Paste your certificate layout here, including the placeholders above."></textarea>
+
+                                <label class="template-modal-label" for="templateModalFile">
+                                    &hellip;or upload a document
+                                </label>
+                                <input type="file" id="templateModalFile" name="file" class="form-control" accept=".docx,.html,.htm" />
+                                <p class="template-modal-hint">
+                                    An uploaded file wins over pasted text. Embedded images are inlined automatically.
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="secondary-btn" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="primary-modal-btn" id="templateModalSave">
+                                    <i class="bi bi-check2 me-1"></i> Save Template
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FORMAT TEMPLATE MODAL -->
+            <div id="formatModal" class="modal fade" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Certificate Format Template</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted">
+                                Plain-text fallback format for this certificate type. It is only used when the
+                                type has no layout in the <strong>Certificate Template Editor</strong>.
+                            </p>
+                            <div class="format-hint">{RESIDENT} &nbsp; {PURPOSE} &nbsp; {ISSUED} &nbsp; {ORNUMBER} &nbsp; {AMOUNT} &nbsp; {ID} &nbsp; {TITLE}</div>
+                            <textarea id="formatModalText" class="form-control" rows="14" placeholder="Paste your certificate format here..."></textarea>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="secondary-btn" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="primary-modal-btn" onclick="saveFormatModal()">Save Format</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- SECURITY TAB -->
+        @if (Model.ActiveTab == "security")
+        {
+            <form id="securitySettingsForm" asp-controller="Home" asp-action="SaveSettings" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="ActiveTab" value="security" />
+
+                <div class="settings-card">
+                    <div class="card-header">
+                        <h2>System Preferences</h2>
+                        <p>Configure notifications and document processing behavior.</p>
+                    </div>
+
+                    <div class="settings-list">
+                        <div class="setting-item">
+                            <div>
+                                <h3>Auto-Approve Low Risk Requests</h3>
+                                <p>Automatically approve requests that meet configured low-risk requirements.</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="AutoApproveLowRisk" value="true" @(Model.AutoApproveLowRisk ? "checked" : "") />
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="setting-item">
+                            <div>
+                                <h3>Email Notifications</h3>
+                                <p>Send system notifications through email.</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="EmailNotifications" value="true" @(Model.EmailNotifications ? "checked" : "") />
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="setting-item">
+                            <div>
+                                <h3>SMS Notifications</h3>
+                                <p>Send important notifications through SMS.</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="SmsNotifications" value="true" @(Model.SmsNotifications ? "checked" : "") />
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <div class="card-header">
+                        <h2>Security</h2>
+                        <p>Manage authentication and session security.</p>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Two-Factor Authentication</label>
+                            <select name="TwoFactorAuth">
+                                <option value="Required" selected="@(Model.TwoFactorAuth == "Required")">Required</option>
+                                <option value="Optional" selected="@(Model.TwoFactorAuth == "Optional")">Optional</option>
+                                <option value="Disabled" selected="@(Model.TwoFactorAuth == "Disabled")">Disabled</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Session Timeout</label>
+                            <select name="SessionTimeout">
+                                <option value="15" selected="@(Model.SessionTimeout == "15")">15 Minutes</option>
+                                <option value="30" selected="@(Model.SessionTimeout == "30")">30 Minutes</option>
+                                <option value="60" selected="@(Model.SessionTimeout == "60")">60 Minutes</option>
+                                <option value="120" selected="@(Model.SessionTimeout == "120")">120 Minutes</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        }
+
+        <!-- CERTIFICATE TEMPLATE EDITOR MODAL: the Dynamic Placeholders palette and the
+             configured-template list live here instead of inline on the page. -->
+        <div id="templateEditorModal" class="modal fade" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Certificate Template Editor</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="template-card-heading">
+                            <i class="bi bi-braces-asterisk"></i>
+                            <strong>Dynamic Placeholders</strong>
+                        </div>
+                        <p class="template-card-copy">
+                            Placeholders written as <code>{{ Token }}</code> are filled automatically when a
+                            certificate is previewed, printed or issued. Click a placeholder to copy it, then
+                            paste it into your layout in the Template Editor. The official header, seals and
+                            signature block stay exactly as you lay them out.
+                        </p>
+
+                        <div class="format-hint">
+                            @foreach (var token in Model.TemplateTokens)
+                            {
+                                <button type="button"
+                                        class="token-chip"
+                                        title="@token.Description - example: @token.Sample"
+                                        onclick="copyToken('@token.Placeholder')">@token.Placeholder</button>
+                            }
+                        </div>
+
+                        <div class="template-card-side mt-3">
+                            <span class="template-side-label">Templates configured</span>
+                            <strong class="template-side-count">@Model.CertificateTemplates.Count</strong>
+                            <ul class="template-type-list">
+                                @foreach (var template in Model.CertificateTemplates)
+                                {
+                                    <li>
+                                        <a asp-controller="Home"
+                                           asp-action="CertificateTemplateEditor"
+                                           asp-route-id="@template.Id">@template.CertificateType</a>
+                                    </li>
+                                }
+                                @if (Model.CertificateTemplates.Count == 0)
+                                {
+                                    <li class="template-type-empty">No templates yet.</li>
+                                }
+                            </ul>
+                            <p class="template-side-hint">
+                                Missing a type? Use the <strong>Template</strong> button on its row in
+                                <strong>Certificates &amp; Fees</strong> to paste a layout or upload a
+                                <strong>.docx</strong> without leaving this page.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="secondary-btn" data-bs-dismiss="modal">Close</button>
+                        <a asp-controller="Home" asp-action="CertificateTemplateEditor" class="primary-modal-btn">
+                            <i class="bi bi-magic me-1"></i> Open Full Editor
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function submitCurrentForm() {
+            var activeForm = document.querySelector('.settings-body form[method="post"]');
+            if (activeForm) {
+                activeForm.submit();
+            }
+        }
+
+        function addCertificateRow() {
+            var tbody = document.querySelector('#documentsSettingsForm tbody');
+            if (!tbody) return;
+            var row = document.createElement('tr');
+            row.innerHTML =
+                '<td><span class="row-index"></span>' +
+                '<input type="hidden" name="newrow.Id" value="0" /></td>' +
+                '<td><input type="text" name="newrow.Type" class="cert-type-input cert-type-value" placeholder="Certificate Type" /></td>' +
+                '<td><div class="fee-input"><span>₱</span><input type="number" name="newrow.Fee" value="0" min="0" step="0.01" /></div></td>' +
+                '<td><label class="checkbox-container"><input type="checkbox" name="newrow.RequiresResidency" value="true" /><span>Required</span></label></td>' +
+                '<td><select name="newrow.Status" class="status-select" onchange="paintStatusSelect(this)"><option value="Active" selected>Active</option><option value="Inactive">Inactive</option></select></td>' +
+                '<td><span class="template-status is-missing">Default</span>' +
+                '<button type="button" class="icon-btn btn-template-cert needs-attention" title="Paste or upload the template" onclick="openTemplateModal(this)"><i class="bi bi-file-earmark-richtext"></i></button></td>' +
+                '<td><textarea class="format-store" name="newrow.Format" style="display:none"></textarea><button type="button" class="icon-btn btn-format-cert" title="Set legacy plain-text Format" onclick="openFormatModal(this)"><i class="bi bi-file-earmark-text"></i></button></td>' +
+                '<td><button type="button" class="btn-remove-cert" title="Remove" onclick="removeCertificateRow(this)"><i class="bi bi-trash"></i></button></td>';
+            tbody.appendChild(row);
+            updateRowIndices();
+            paintStatusSelect(row.querySelector('.status-select'));
+            var typeInput = row.querySelector('.cert-type-input');
+            if (typeInput) {
+                typeInput.focus();
+                if (typeof typeInput.scrollIntoView === 'function') typeInput.scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        function quickAddCertificate() {
+            var tbody = document.querySelector('#documentsSettingsForm tbody');
+            if (!tbody) return;
+            var typeInput = document.getElementById('quickCertType');
+            var feeInput = document.getElementById('quickCertFee');
+            var type = (typeInput.value || '').trim();
+            if (!type) {
+                typeInput.focus();
+                return;
+            }
+            var fee = feeInput.value || '0';
+            var required = document.getElementById('quickCertRequired').checked;
+
+            var row = document.createElement('tr');
+            row.innerHTML =
+                '<td><span class="row-index"></span>' +
+                '<input type="hidden" name="newrow.Id" value="0" /></td>' +
+                '<td><input type="text" name="newrow.Type" class="cert-type-input cert-type-value" value="' + escapeHtml(type) + '" /></td>' +
+                '<td><div class="fee-input"><span>₱</span><input type="number" name="newrow.Fee" value="' + escapeHtml(fee) + '" min="0" step="0.01" /></div></td>' +
+                '<td><label class="checkbox-container"><input type="checkbox" name="newrow.RequiresResidency" value="true"' + (required ? ' checked' : '') + ' /><span>Required</span></label></td>' +
+                '<td><select name="newrow.Status" class="status-select" onchange="paintStatusSelect(this)"><option value="Active" selected>Active</option><option value="Inactive">Inactive</option></select></td>' +
+                '<td><span class="template-status is-missing">Default</span>' +
+                '<button type="button" class="icon-btn btn-template-cert needs-attention" title="Paste or upload the template" onclick="openTemplateModal(this)"><i class="bi bi-file-earmark-richtext"></i></button></td>' +
+                '<td><textarea class="format-store" name="newrow.Format" style="display:none"></textarea><button type="button" class="icon-btn btn-format-cert" title="Set legacy plain-text Format" onclick="openFormatModal(this)"><i class="bi bi-file-earmark-text"></i></button></td>' +
+                '<td><button type="button" class="btn-remove-cert" title="Remove" onclick="removeCertificateRow(this)"><i class="bi bi-trash"></i></button></td>';
+            tbody.appendChild(row);
+            updateRowIndices();
+            paintStatusSelect(row.querySelector('.status-select'));
+
+            typeInput.value = '';
+            feeInput.value = '0';
+            document.getElementById('quickCertRequired').checked = false;
+            typeInput.focus();
+            var newTypeInput = row.querySelector('.cert-type-input');
+            if (newTypeInput && typeof newTypeInput.scrollIntoView === 'function') {
+                newTypeInput.scrollIntoView({ block: 'nearest' });
+            }
+            if (typeof showToast === 'function') {
+                showToast('Certificate added. Click Save Changes to keep it.', 'success');
+            }
+        }
+
+        function submitDocumentsForm() {
+            var form = document.getElementById('documentsSettingsForm');
+            if (form) form.submit();
+        }
+
+        // Opens the paste/upload modal for one fee-table row. The certificate name
+        // is read from the row rather than passed through an inline attribute, so a
+        // name containing quotes or markup cannot break out into the handler.
+        function openTemplateModal(btn) {
+            var row = btn.closest('tr');
+            var typeEl = row ? row.querySelector('.cert-type-value') : null;
+            var name = typeEl ? (typeEl.value || '').trim() : '';
+
+            if (!name) {
+                if (typeof showToast === 'function') {
+                    showToast('Give the certificate a name before setting its template.', 'error');
+                }
+                if (typeEl && typeof typeEl.focus === 'function') typeEl.focus();
+                return;
+            }
+
+            var nameInput = document.getElementById('templateModalName');
+            var typeLabel = document.getElementById('templateModalType');
+            var textEl = document.getElementById('templateModalText');
+            var fileEl = document.getElementById('templateModalFile');
+
+            if (nameInput) nameInput.value = name;
+            if (typeLabel) typeLabel.textContent = name;
+            if (textEl) textEl.value = '';
+            if (fileEl) fileEl.value = '';
+
+            // Tell the administrator what happens if they save nothing, so a blank
+            // submit is a deliberate choice rather than a silent no-op.
+            var status = row ? row.querySelector('.template-status') : null;
+            var current = document.getElementById('templateModalCurrent');
+            if (current) {
+                current.textContent = status && status.textContent.trim() === 'Custom'
+                    ? 'This certificate currently has a saved layout. Saving replaces it.'
+                    : 'This certificate has no saved layout, so a generated one is printed.';
+            }
+
+            var modalEl = document.getElementById('templateModal');
+            if (typeof window.bootstrap !== 'undefined' && bootstrap.Modal) {
+                new bootstrap.Modal(modalEl).show();
+            } else {
+                modalEl.style.display = 'block';
+            }
+        }
+
+        var formatTarget = null;
+
+        function openFormatModal(btn) {
+            var row = btn.closest('tr');
+            var store = row ? row.querySelector('.format-store') : null;
+            formatTarget = store;
+            var textEl = document.getElementById('formatModalText');
+            if (textEl) textEl.value = store ? store.value : '';
+            if (typeof window.bootstrap !== 'undefined' && bootstrap.Modal) {
+                new bootstrap.Modal(document.getElementById('formatModal')).show();
+            } else {
+                document.getElementById('formatModal').style.display = 'block';
+            }
+        }
+
+        function saveFormatModal() {
+            if (formatTarget) {
+                formatTarget.value = document.getElementById('formatModalText').value;
+            }
+            if (typeof showToast === 'function') {
+                showToast('Format saved. Click Save Changes to keep it.', 'success');
+            }
+            var modalEl = document.getElementById('formatModal');
+            if (typeof window.bootstrap !== 'undefined' && bootstrap.Modal && bootstrap.Modal.getInstance(modalEl)) {
+                bootstrap.Modal.getInstance(modalEl).hide();
+            } else {
+                modalEl.style.display = 'none';
+            }
+        }
+
+        function removeCertificateRow(btn) {
+            var tbody = btn.closest('tbody');
+            if (!tbody) return;
+            if (tbody.querySelectorAll('tr').length <= 1) return;
+            btn.closest('tr').remove();
+            updateRowIndices();
+        }
+
+        function updateRowIndices() {
+            var tbody = document.querySelector('#documentsSettingsForm tbody');
+            if (!tbody) return;
+            var rows = tbody.querySelectorAll('tr');
+            for (var r = 0; r < rows.length; r++) {
+                var tr = rows[r];
+                var num = tr.querySelector('.row-index');
+                if (num) num.textContent = (r + 1);
+                var fields = tr.querySelectorAll('input, select, textarea');
+                for (var f = 0; f < fields.length; f++) {
+                    var el = fields[f];
+                    var name = el.getAttribute('name');
+                    if (name) {
+                        name = name.replace(/^(Certificates\[\d+\]|newrow)\./, 'Certificates[' + r + '].');
+                        el.setAttribute('name', name);
+                    }
+                }
+            }
+        }
+
+        function paintStatusSelect(sel) {
+            if (!sel) return;
+            var value = sel.value;
+            sel.classList.remove('status-active', 'status-inactive');
+            if (value === 'Active') {
+                sel.classList.add('status-active');
+            } else {
+                sel.classList.add('status-inactive');
+            }
+        }
+
+        // Opens the Certificate Template Editor modal, which carries the Dynamic
+        // Placeholders palette and the configured-template list. The full-page editor
+        // stays reachable from the modal footer.
+        function openTemplateEditorModal() {
+            var modalEl = document.getElementById('templateEditorModal');
+            if (!modalEl) return;
+
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                new bootstrap.Modal(modalEl).show();
+            } else {
+                modalEl.classList.add('show');
+                modalEl.style.display = 'block';
+            }
+        }
+
+        // Copies a {{ Token }} placeholder so it can be pasted into the Template Editor
+        function copyToken(placeholder) {
+            var text = String(placeholder || '').replace(/\{\{|\}\}/g, '');
+
+            function write(clipboard) {
+                if (clipboard && typeof clipboard.writeText === 'function') {
+                    clipboard.writeText(text);
+                }
+            }
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                    if (typeof showToast === 'function') {
+                        showToast(text + ' copied. Paste it in the Template Editor.', 'success');
+                    }
+                }).catch(function () { fallbackCopy(text); });
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            var helper = document.createElement('textarea');
+            helper.value = text;
+            helper.setAttribute('readonly', '');
+            helper.style.position = 'absolute';
+            helper.style.left = '-9999px';
+            document.body.appendChild(helper);
+            helper.select();
+
+            try {
+                document.execCommand('copy');
+                if (typeof showToast === 'function') {
+                    showToast(text + ' copied. Paste it in the Template Editor.', 'success');
+                }
+            } catch (e) {
+                if (typeof showToast === 'function') {
+                    showToast('Could not copy automatically — ' + text, 'error');
+                }
+            }
+
+            document.body.removeChild(helper);
+        }
+
+        // ------------------------------------------------ Barangay Profile save
+        //
+        // The eight profile inputs already post with #generalSettingsForm, so this
+        // posts them as JSON to the dedicated endpoint. The endpoint is antiforgery
+        // protected and, because its body is JSON, the token travels in the
+        // RequestVerificationToken header (configured in Program.cs).
+        function readProfileForm() {
+            var form = document.getElementById('generalSettingsForm');
+            if (!form) return null;
+
+            function value(name) {
+                var el = form.querySelector('[name="' + name + '"]');
+                return el ? el.value : '';
+            }
+
+            return {
+                barangayName: value('BarangayName'),
+                municipality: value('Municipality'),
+                province: value('Province'),
+                contactEmail: value('ContactEmail'),
+                contactPhone: value('ContactPhone'),
+                officeHours: value('OfficeHours'),
+                signatoryName: value('SignatoryName'),
+                signatoryRole: value('SignatoryRole')
+            };
+        }
+
+        function profileAntiforgeryToken() {
+            var input = document.querySelector('#generalSettingsForm input[name="__RequestVerificationToken"]');
+            return input ? input.value : '';
+        }
+
+        function highlightProfileField(fieldName) {
+            if (!fieldName) return;
+
+            // The wire name is the CLR property name ("BarangayName"), which is also
+            // the input's name attribute, so one string addresses the element.
+            var el = document.querySelector('#generalSettingsForm [name="' + fieldName + '"]');
+            if (!el) return;
+
+            el.style.borderColor = '#dc3545';
+            el.focus();
+
+            // Clear the marker once the administrator starts correcting it.
+            el.addEventListener('input', function handler() {
+                el.style.borderColor = '';
+                el.removeEventListener('input', handler);
+            });
+        }
+
+        function saveBarangayProfile() {
+            var button = document.getElementById('btnSaveBarangayProfile');
+            var payload = readProfileForm();
+
+            if (!button || !payload) return;
+
+            if (!payload.barangayName || !payload.barangayName.trim()) {
+                if (typeof showToast === 'function') {
+                    showToast('Barangay Name is required.', 'error');
+                }
+                highlightProfileField('BarangayName');
+                return;
+            }
+
+            // Guard against a double submit: the button is disabled for the round
+            // trip, so an impatient second click cannot post a half-typed profile.
+            var originalHtml = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Saving...';
+
+            function restoreButton() {
+                button.disabled = false;
+                button.innerHTML = originalHtml;
+            }
+
+            fetch('/Settings/SaveBarangayProfile', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': profileAntiforgeryToken()
+                },
+                body: JSON.stringify(payload)
+            })
+                .then(function (response) {
+                    // A 400 carries a named offending field. A 500 or a dropped
+                    // connection has no usable body, so that path is handled
+                    // explicitly instead of assuming the response parses.
+                    return response.json()
+                        .catch(function () {
+                            return { success: false, message: 'The server returned an unexpected response.' };
+                        })
+                        .then(function (data) {
+                            return { ok: response.ok, data: data };
+                        });
+                })
+                .then(function (result) {
+                    if (result.ok && result.data && result.data.success) {
+                        if (typeof showToast === 'function') {
+                            showToast(result.data.message || 'Barangay Profile updated successfully!', 'success');
+                        }
+                    } else {
+                        var message = (result.data && result.data.message)
+                            ? result.data.message
+                            : 'The profile could not be saved. Please try again.';
+
+                        if (typeof showToast === 'function') {
+                            showToast(message, 'error');
+                        }
+
+                        highlightProfileField(result.data && result.data.field);
+                    }
+                })
+                .catch(function () {
+                    if (typeof showToast === 'function') {
+                        showToast('Could not reach the server. Your changes were not saved.', 'error');
+                    }
+                })
+                .then(restoreButton);
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var selects = document.querySelectorAll('#documentsSettingsForm .status-select');
+            for (var s = 0; s < selects.length; s++) paintStatusSelect(selects[s]);
+
+            var saveButton = document.getElementById('btnSaveBarangayProfile');
+            if (saveButton) {
+                saveButton.addEventListener('click', saveBarangayProfile);
+            }
+
+            // Ctrl/Cmd+S inside the profile card saves without leaving the page.
+            var form = document.getElementById('generalSettingsForm');
+            if (form) {
+                form.addEventListener('keydown', function (e) {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                        e.preventDefault();
+                        saveBarangayProfile();
+                    }
+                });
+            }
+        });
+    </script>
+}

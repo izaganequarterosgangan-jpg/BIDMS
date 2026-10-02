@@ -1,0 +1,384 @@
+﻿@model BDIMS.Models.DashboardViewModel
+@inject Microsoft.Extensions.Options.IOptions<BDIMS.Models.BarangayOptions> BarangayCfg
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Dashboard";
+}
+
+<!-- Top Navigation Header -->
+<header class="top-header">
+    <div>
+        <h1 class="header-title">Dashboard</h1>
+        <p class="header-subtitle">@DateTime.Now.ToString("dddd, MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture) · Barangay @BarangayCfg.Value.BarangayName, @BarangayCfg.Value.Municipality, @BarangayCfg.Value.Province</p>
+    </div>
+    <div class="header-actions">
+        <div class="search-box-header">
+            <svg class="search-icon-input" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input type="text" class="search-input" placeholder="Search records..." />
+            @* Global search results. Absolutely positioned by the layout's existing
+               .notif-dropdown rule and filled by the script at the bottom of the page,
+               so the header, tables, charts and quick actions never reflow. *@
+            <div id="globalSearchResults" class="notif-dropdown" role="listbox" aria-label="Search results"></div>
+        </div>
+        <div class="notification-wrapper">
+            <button class="notification-button" type="button" aria-label="Notifications" onclick="toggleNotifDropdown(event)">
+                <i class="bi bi-bell"></i>
+                <span id="notifBadgeDashboard" class="notif-badge" style="display:none">0</span>
+            </button>
+            <div id="notifDropdown" class="notif-dropdown" aria-hidden="true"></div>
+        </div>
+        <div class="header-avatar" title="@BDIMS.Services.UserClaims.GetDisplayName(User)">
+            @BDIMS.Services.UserClaims.GetInitials(User)
+        </div>
+    </div>
+</header>
+
+<!-- Hero / Action Banner -->
+<section class="hero-card">
+    <div>
+        <span class="hero-eyebrow">GOOD MORNING</span>
+        <h3>@Model.PendingRequestsCount document request@(Model.PendingRequestsCount != 1 ? "s" : "") need@(Model.PendingRequestsCount != 1 ? "" : "s") your attention today.</h3>
+    </div>
+    <div class="hero-actions">
+        <a asp-controller="Home" asp-action="Documents" asp-route-newRequest="true" class="primary-btn">+ New Request</a>
+        <a asp-controller="Home" asp-action="Documents" asp-route-searchQuery="Pending" class="secondary-btn">View Pending</a>
+    </div>
+</section>
+
+<!-- Metrics Grid -->
+<section class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-header">
+            <div class="stat-icon blue">
+                <i class="bi bi-people text-primary fs-5"></i>
+            </div>
+        </div>
+        <div class="stat-value">@Model.TotalResidents.ToString("N0")</div>
+        <div class="stat-label">Total Residents</div>
+        <div class="stat-trend positive">Live count</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-header">
+            <div class="stat-icon amber">
+                <i class="bi bi-file-earmark-text text-warning fs-5"></i>
+            </div>
+        </div>
+        <div class="stat-value">@Model.PendingRequestsCount</div>
+        <div class="stat-label">Pending Requests</div>
+        <div class="stat-trend warning">Live queue</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-header">
+            <div class="stat-icon teal">
+                <i class="bi bi-award text-info fs-5"></i>
+            </div>
+        </div>
+        <div class="stat-value">@Model.CertificatesIssuedCount</div>
+        <div class="stat-label">Certificates Issued</div>
+        <div class="stat-trend positive">Live count</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-header">
+            <div class="stat-icon purple">
+                <i class="bi bi-shield-exclamation text-purple fs-5"></i>
+            </div>
+        </div>
+        <div class="stat-value">@Model.BlotterCasesCount</div>
+        <div class="stat-label">Blotter Cases</div>
+        <div class="stat-trend purple">Live blotter counts</div>
+    </div>
+</section>
+
+<!-- Analytics Charts Grid -->
+<section class="dashboard-grid">
+    <div class="panel-card">
+        <div class="panel-header">
+            <div>
+                <h3>Document Request Trends</h3>
+                <p>Monthly distribution of requested documents.</p>
+            </div>
+        </div>
+        <div class="chart-wrapper">
+            <canvas id="issuanceChart"></canvas>
+        </div>
+    </div>
+
+    <div class="panel-card">
+        <div class="panel-header">
+            <div>
+                <h3>Demographics</h3>
+                <p>Resident status breakdown.</p>
+            </div>
+        </div>
+        <div class="chart-wrapper">
+            <canvas id="demographicsChart"></canvas>
+        </div>
+    </div>
+</section>
+
+<!-- Tables & Quick Actions Grid -->
+<section class="dashboard-grid">
+    <!-- Recent Requests Table Panel -->
+    <div class="panel-card">
+        <div class="panel-header">
+            <div>
+                <h3>Recent Document Requests</h3>
+                <p>Showing latest requests from the queue.</p>
+            </div>
+            <a href="#" class="text-btn">View All</a>
+        </div>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>REQUEST ID</th>
+                        <th>RESIDENT</th>
+                        <th>DOCUMENT TYPE</th>
+                        <th>DATE</th>
+                        <th>STATUS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Requests.Any())
+                    {
+                        @foreach (var req in Model.Requests)
+                        {
+                            string pill = req.Status switch
+                            {
+                                "Approved" => "status-approved",
+                                "Rejected" => "status-rejected",
+                                "Pending" => "status-pending",
+                                "In Review" => "status-inreview",
+                                _ => "status-processing"
+                            };
+                            <tr>
+                                <td class="req-id">@req.Id</td>
+                                <td>
+                                    <div class="resident-cell">
+                                        <span class="table-avatar">@req.Avatar</span>
+                                        <span>@req.Resident</span>
+                                    </div>
+                                </td>
+                                <td>@req.Type</td>
+                                <td>@req.Date</td>
+                                <td><span class="status-pill @pill">@req.Status</span></td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">No records found. Click <strong>New Request</strong> to add your first real request.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Quick Actions Panel -->
+    <div class="panel-card">
+        <div class="panel-header">
+            <div>
+                <h3>Quick Actions</h3>
+                <p>Common tasks for daily operations.</p>
+            </div>
+        </div>
+        <div class="action-list">
+            <a asp-controller="Home" asp-action="Documents" asp-route-newRequest="true" asp-route-title="Barangay Clearance" class="action-btn">
+                <span class="action-icon">
+                    <i class="bi bi-file-earmark-plus text-primary"></i>
+                </span>
+                <span>Issue Barangay Clearance</span>
+            </a>
+            <a asp-controller="Home" asp-action="Residents" class="action-btn">
+                <span class="action-icon">
+                    <i class="bi bi-person-plus text-primary"></i>
+                </span>
+                <span>Register New Resident</span>
+            </a>
+            <a asp-controller="Home" asp-action="Blotter" asp-route-openModal="true" class="action-btn">
+                <span class="action-icon">
+                    <i class="bi bi-shield-plus text-primary"></i>
+                </span>
+                <span>File Blotter Report</span>
+            </a>
+            <a asp-controller="Home" asp-action="Announcements" asp-route-openModal="true" class="action-btn">
+                <span class="action-icon">
+                    <i class="bi bi-broadcast text-primary"></i>
+                </span>
+                <span>Post Announcement</span>
+            </a>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+        // 1. Bar Chart Configuration
+        const ctxBar = document.getElementById('issuanceChart')?.getContext('2d');
+        if (ctxBar) {
+        new Chart(ctxBar, {
+        type: 'bar',
+        data: {
+        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+        datasets: [{
+        label: 'Requests',
+        data: [@Model.PendingRequestsCount, @Model.CertificatesIssuedCount, @Model.BlotterCasesCount, 0, 0, 0],
+        backgroundColor: '#2563eb',
+        borderRadius: 4
+        }]
+        },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+        x: { grid: { display: false } }
+        }
+        }
+        });
+        }
+
+        // 2. Doughnut Chart Configuration
+        const ctxDoughnut = document.getElementById('demographicsChart')?.getContext('2d');
+        if (ctxDoughnut) {
+        new Chart(ctxDoughnut, {
+        type: 'doughnut',
+        data: {
+        labels: ['Pending', 'Certificates', 'Blotter'],
+        datasets: [{
+        data: [@Model.PendingRequestsCount, @Model.CertificatesIssuedCount, @Model.BlotterCasesCount],
+        backgroundColor: ['#2563eb', '#f59e0b', '#8b5cf6'],
+        borderWidth: 2,
+        borderColor: '#ffffff'
+        }]
+        },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+        legend: {
+        position: 'bottom',
+        labels: { font: { size: 11 }, boxWidth: 10 }
+        }
+        },
+        cutout: '70%'
+        }
+        });
+        }
+        });
+    </script>
+
+    <script>
+        // ------- Global search for the top "Search records..." box -------
+        // Results come from /Home/GlobalSearch and are rendered into the floating panel
+        // that already exists (hidden) inside .search-box-header. The panel reuses the
+        // layout's existing dropdown classes and is absolutely positioned, so typing
+        // never shifts the header, tables, charts or quick actions.
+        (function () {
+            var input = document.querySelector('.search-box-header .search-input');
+            var box = document.getElementById('globalSearchResults');
+            if (!input || !box) return;
+
+            var timer = null;
+            var lastQuery = null;
+            var targets = [];
+
+            function hide() {
+                box.style.display = 'none';
+                box.setAttribute('aria-hidden', 'true');
+                targets = [];
+            }
+
+            function show() {
+                box.style.display = 'block';
+                box.setAttribute('aria-hidden', 'false');
+            }
+
+            function rowHtml(url, title, meta) {
+                return '<div class="notif-item" role="option" data-url="' + escapeHtml(url || '') + '">' +
+                    '<div class="notif-item-content">' +
+                    '<div class="title">' + escapeHtml(title || '') + '</div>' +
+                    '<div class="meta">' + escapeHtml(meta || '') + '</div>' +
+                    '</div>' +
+                    '</div>';
+            }
+
+            function render(data) {
+                var modules = (data && data.modules) || [];
+                var results = (data && data.results) || [];
+                targets = [];
+
+                var html = '<div class="header"><strong>Search results' +
+                    (results.length ? ' (' + results.length + ')' : '') +
+                    '</strong></div><div class="items">';
+
+                modules.forEach(function (m) {
+                    targets.push(m.url);
+                    html += rowHtml(m.url, m.label || m.module || 'Open', m.sublabel || '');
+                });
+
+                results.forEach(function (r) {
+                    targets.push(r.url);
+                    var title = r.id ? (r.id + ' \u00B7 ' + (r.title || '')) : (r.title || '');
+                    html += rowHtml(r.url, title, (r.module || '') + ' \u00B7 ' + (r.meta || ''));
+                });
+
+                if (targets.length === 0) {
+                    html += '<div class="notif-empty">No matching records found.</div>';
+                }
+
+                html += '</div>';
+                box.innerHTML = html;
+                show();
+            }
+
+            function search() {
+                var term = input.value.trim();
+                if (term.length === 0) { lastQuery = null; hide(); return; }
+                if (term === lastQuery) return;
+                lastQuery = term;
+
+                fetch('/Home/GlobalSearch?q=' + encodeURIComponent(term))
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) { if (data && data.success) render(data); })
+                    .catch(function (err) { console.error('Global search failed', err); });
+            }
+
+            input.addEventListener('input', function () {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(search, 200);
+            });
+
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') { hide(); return; }
+                if (e.key === 'Enter' && targets.length > 0) {
+                    e.preventDefault();
+                    window.location.href = targets[0];
+                }
+            });
+
+            box.addEventListener('click', function (e) {
+                var item = e.target.closest ? e.target.closest('.notif-item') : null;
+                var url = item && item.getAttribute('data-url');
+                if (url) window.location.href = url;
+            });
+
+            document.addEventListener('click', function (e) {
+                if (e.target.closest && !e.target.closest('.search-box-header')) hide();
+            });
+
+            hide();
+        })();
+    </script>
+}

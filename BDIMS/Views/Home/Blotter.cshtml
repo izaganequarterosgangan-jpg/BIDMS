@@ -1,0 +1,1024 @@
+@model BDIMS.Models.BlotterViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Blotter";
+
+    // Cases still needing follow-up. IN PROGRESS is already the full set of
+    // unresolved cases (OPEN is a narrower slice within it), so adding OPEN here
+    // would count the same case twice. InProgressCount alone is the workload.
+    var attentionCount = Model.InProgressCount;
+}
+
+@* The file on disk is Blotter.css. This link used blotter.css, which resolves on
+   Windows and 404s on a case-sensitive host, taking the whole page's styling with it. *@
+<link rel="stylesheet" href="~/css/Blotter.css" asp-append-version="true" />
+
+<header class="top-header">
+    <div>
+        <h2 class="header-title">Blotter &amp; Incident Management</h2>
+        <p class="header-subtitle">Manage blotter incidents, parties involved, and administrative updates.</p>
+    </div>
+    <div class="header-actions">
+        <button type="button" id="openModalBtn" class="action-button" data-bs-toggle="modal" data-bs-target="#caseModal">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            Add Case
+        </button>
+    </div>
+</header>
+
+<div class="content-area">
+    <div class="hero-card">
+        <div>
+            <p class="eyebrow">CASE MONITOR</p>
+            <h3 id="attentionCountText">@attentionCount @(attentionCount == 1 ? "case needs" : "cases need") attention</h3>
+            <p>Open and active incidents are tracked here for fast follow-up.</p>
+        </div>
+        <div class="pill">Urgent cases monitored</div>
+    </div>
+
+    @* Clicking a card filters the table to that bucket. The mini-card classes are
+   untouched -- only ids/data attributes are added so the existing stylesheet keeps
+   rendering them exactly as before. The ids on the <strong> values let the status
+   modal refresh the counts in place after a save.
+
+   Two cards remain (IN PROGRESS / RESOLVED); the OPEN card was removed. *@
+<div class="stats-row stats-row-2col">
+    <div class="mini-card info" id="inProgressCard" data-status-bucket="inprogress" role="button" tabindex="0"
+         title="Show in-progress cases" aria-label="Filter by in-progress cases">
+        <span class="mini-label">In Progress</span>
+        <strong id="inProgressCount">@Model.InProgressCount</strong>
+    </div>
+    <div class="mini-card success" id="resolvedCard" data-status-bucket="resolved" role="button" tabindex="0"
+         title="Show resolved cases" aria-label="Filter by resolved cases">
+        <span class="mini-label">Resolved</span>
+        <strong id="resolvedCount">@Model.ResolvedCount</strong>
+    </div>
+</div>
+
+    <div class="table-card">
+        <div class="table-header">
+            <h4>Blotter Cases</h4>
+        </div>
+
+        <form method="get" asp-action="Blotter" asp-controller="Home" class="filters-bar">
+            <div class="filter-group">
+                <label>Search</label>
+                <input type="text" name="searchQuery" value="@Model.SearchQuery" placeholder="ID, complainant, respondent..." class="filter-input" />
+            </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select id="statusFilter" name="statusFilter" class="filter-select" onchange="this.form.submit()">
+                    <option value="">All Statuses</option>
+                    @foreach (var st in Model.Statuses)
+                    {
+                        <option value="@st" selected="@(Model.StatusFilter == st)">@st</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Category</label>
+                <select name="categoryFilter" class="filter-select" onchange="this.form.submit()">
+                    <option value="">All Categories</option>
+                    @foreach (var cat in Model.Categories)
+                    {
+                        <option value="@cat" selected="@(Model.CategoryFilter == cat)">@cat</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Priority</label>
+                <select name="priorityFilter" class="filter-select" onchange="this.form.submit()">
+                    <option value="">All Priorities</option>
+                    @foreach (var pr in Model.Priorities)
+                    {
+                        <option value="@pr" selected="@(Model.PriorityFilter == pr)">@pr</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>From</label>
+                <input type="date" name="dateFrom" value="@Model.DateFrom" class="filter-input" onchange="this.form.submit()" />
+            </div>
+            <div class="filter-group">
+                <label>To</label>
+                <input type="date" name="dateTo" value="@Model.DateTo" class="filter-input" onchange="this.form.submit()" />
+            </div>
+            <div class="filter-group filter-actions">
+                <a asp-action="Blotter" asp-controller="Home" class="btn-reset-filter">Reset</a>
+            </div>
+        </form>
+
+        <div class="table-responsive">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>Case ID</th>
+                        <th>Incident Type</th>
+                        <th>Complainant vs Respondent</th>
+                        <th>Date &amp; Time Reported</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Cases != null && Model.Cases.Any())
+                    {
+                        foreach (var item in Model.Cases)
+                        {
+                            <tr data-case-id="@item.Id"
+                                data-title="@item.Title"
+                                data-resident="@item.Resident"
+                                data-date="@item.DateFiled"
+                                data-status="@item.Status"
+                                data-incident-type="@item.IncidentType"
+                                data-incident-date="@item.IncidentDate"
+                                data-location="@item.Location"
+                                data-priority="@item.Priority"
+                                data-complainant="@item.Resident"
+                                data-complainant-contact="@item.ComplainantContact"
+                                data-complainant-address="@item.ComplainantAddress"
+                                data-respondent="@item.RespondentName"
+                                data-respondent-address="@item.RespondentAddress"
+                                data-victim="@item.VictimName"
+                                data-narrative="@item.Narrative"
+                                data-officer="@item.Officer">
+                                <td class="case-id">@item.Id</td>
+                                <td>@item.IncidentType</td>
+                                <td>
+                                    <div class="parties-cell">
+                                        <span class="party-name">@item.ComplainantName</span>
+                                        <span class="party-arrow">vs</span>
+                                        <span class="party-name">@(string.IsNullOrWhiteSpace(item.RespondentName) ? "—" : item.RespondentName)</span>
+                                    </div>
+                                </td>
+                                <td>@item.DateFiled</td>
+                                <td>
+                                    <span class="priority-tag priority-@item.Priority.ToLower()">@item.Priority</span>
+                                </td>
+                                <td>
+                                    <span class="status-tag status-@statusClass(item.Status)">@item.Status</span>
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="icon-btn-case icon-view" title="View Details" aria-label="View Details" onclick="openCaseView(this)"><i class="bi bi-eye"></i></button>
+                                        <button type="button" class="icon-btn-case icon-edit" title="Edit" aria-label="Edit" onclick="openEditCase(this)"><i class="bi bi-pencil"></i></button>
+                                        <button type="button" class="icon-btn-case icon-status" title="Update Status" aria-label="Update Status" onclick="openStatusCase(this)"><i class="bi bi-arrow-repeat"></i></button>
+                                        <button type="button" class="icon-btn-case icon-delete" title="Delete" aria-label="Delete" onclick="deleteCaseConfirm(this)"><i class="bi bi-trash"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="7" class="empty-state">No records found. Click <strong>Add Case</strong> to file your first real case.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@functions {
+    string statusClass(string status)
+    {
+        switch (status)
+        {
+            case "Under Investigation": return "investigation";
+            case "Scheduled for Hearing": return "hearing";
+            case "Settled / Amicably Resolved": return "settled";
+            case "Referred to PNP": return "pnp";
+            case "Issued CFA": return "cfa";
+            default: return "open";
+        }
+    }
+}
+
+@* ===================== ADD CASE MODAL ===================== *@
+<div class="modal fade" id="caseModal" tabindex="-1" aria-labelledby="caseModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="caseModalLabel"><i class="bi bi-clipboard-data"></i> Add Blotter Case</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="blotterCreateForm" method="post" asp-action="CreateBlotter" asp-controller="Home">
+                @Html.AntiForgeryToken()
+                <div class="modal-body">
+                    <div class="form-section">
+                        <h6 class="form-section-title"><i class="bi bi-clock-history"></i> A. Incident Info &amp; Timestamp</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Incident Type / Category</label>
+                                <select name="incidentType" id="addIncidentType" class="form-select" required>
+                                    <option value="" selected disabled>Select incident type...</option>
+                                    <option>Physical Assault / Injury</option>
+                                    <option>Violence Against Women and Children (VAWC) / Domestic</option>
+                                    <option>Property Damage / Vandalism</option>
+                                    <option>Theft / Robbery</option>
+                                    <option>Grave Threats / Verbal Abuse</option>
+                                    <option>Boundary / Land Dispute</option>
+                                    <option>Public Disturbance / Noise / Nuisance</option>
+                                    <option>Others</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Date &amp; Time of Incident</label>
+                                <input type="datetime-local" name="incidentDate" class="form-control" value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" required />
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label">Incident Location / Purok / Sitio</label>
+                                <input type="text" name="location" class="form-control" placeholder="e.g. Purok 3, near basketball court" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Priority / Severity</label>
+                                <select name="priority" class="form-select">
+                                    <option value="Low">Low</option>
+                                    <option value="Medium" selected>Medium</option>
+                                    <option value="High">High</option>
+                                    <option value="Urgent">Urgent</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h6 class="form-section-title"><i class="bi bi-people"></i> B. Parties Involved</h6>
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <h6 class="form-sub-section">Complainant (Reporting Person)</h6>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Full Name</label>
+                                <input type="text" name="resident" id="addComplainant" class="form-control" placeholder="Full name" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Contact Number</label>
+                                <input type="text" name="complainantContact" class="form-control" placeholder="e.g. 0917 123 4567" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Address / Purok</label>
+                                <input type="text" name="complainantAddress" class="form-control" placeholder="e.g. Purok 2, Governor Boyles" />
+                            </div>
+                            <div class="col-md-12">
+                                <h6 class="form-sub-section">Respondent (Person Complained Of)</h6>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Full Name / Alias</label>
+                                <input type="text" name="respondentName" class="form-control" placeholder="Full name or alias" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Address / Purok</label>
+                                <input type="text" name="respondentAddress" class="form-control" placeholder="e.g. Purok 4, Governor Boyles" />
+                            </div>
+                            <div class="col-md-12">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="addVictimSame" checked onchange="syncVictimFromComplainant('addComplainant','addVictimSame','addVictim')" />
+                                    <label class="form-check-label" for="addVictimSame">Victim is the same as the complainant</label>
+                                </div>
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label">Victim (if different from complainant)</label>
+                                <input type="text" name="victimName" id="addVictim" class="form-control" placeholder="Victim full name" disabled />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h6 class="form-section-title"><i class="bi bi-folder2-open"></i> C. Case Details &amp; Administrative Tracking</h6>
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <label class="form-label">Incident Narrative / Detailed Summary</label>
+                                <textarea name="narrative" class="form-control" rows="4" placeholder="Describe what happened, including time, place, and any witnesses." required></textarea>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Initial Status</label>
+                                <select name="status" class="form-select">
+                                    <option value="Under Investigation" selected>Under Investigation</option>
+                                    <option value="Scheduled for Hearing">Scheduled for Hearing</option>
+                                    <option value="Resolved">Resolved</option>
+                                    <option value="Settled / Amicably Resolved">Settled / Amicably Resolved</option>
+                                    <option value="Referred to PNP">Referred to PNP</option>
+                                    <option value="Issued CFA">Issued CFA</option>
+                                    <option value="Dismissed">Dismissed</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Assigned Officer / Duty Tanod / Secretary</label>
+                                <input type="text" name="officer" class="form-control" placeholder="e.g. Kagawad Juan Cruz / Tanod Name" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i> Save Case</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* ===================== VIEW CASE DETAILS MODAL ===================== *@
+<div class="modal fade" id="caseViewModal" tabindex="-1" aria-labelledby="caseViewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="caseViewModalLabel">Case Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="caseViewBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ===================== EDIT CASE MODAL ===================== *@
+<div class="modal fade" id="caseEditModal" tabindex="-1" aria-labelledby="caseEditModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="caseEditModalLabel"><i class="bi bi-pencil-square"></i> Edit Blotter Case</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="blotterEditForm" method="post" asp-action="UpdateBlotter" asp-controller="Home">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" id="editCaseId" />
+                <div class="modal-body">
+                    <div class="form-section">
+                        <h6 class="form-section-title"><i class="bi bi-clock-history"></i> A. Incident Info &amp; Timestamp</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Incident Type / Category</label>
+                                <select name="incidentType" id="editIncidentType" class="form-select" required>
+                                    <option value="">Select incident type...</option>
+                                    <option>Physical Assault / Injury</option>
+                                    <option>Violence Against Women and Children (VAWC) / Domestic</option>
+                                    <option>Property Damage / Vandalism</option>
+                                    <option>Theft / Robbery</option>
+                                    <option>Grave Threats / Verbal Abuse</option>
+                                    <option>Boundary / Land Dispute</option>
+                                    <option>Public Disturbance / Noise / Nuisance</option>
+                                    <option>Others</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Date &amp; Time of Incident</label>
+                                <input type="datetime-local" name="incidentDate" id="editIncidentDate" class="form-control" />
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label">Incident Location / Purok / Sitio</label>
+                                <input type="text" name="location" id="editLocation" class="form-control" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Priority / Severity</label>
+                                <select name="priority" id="editPriority" class="form-select">
+                                    <option value="Low">Low</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="High">High</option>
+                                    <option value="Urgent">Urgent</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h6 class="form-section-title"><i class="bi bi-people"></i> B. Parties Involved</h6>
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <h6 class="form-sub-section">Complainant (Reporting Person)</h6>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Full Name</label>
+                                <input type="text" name="complainant" id="editComplainant" class="form-control" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Contact Number</label>
+                                <input type="text" name="complainantContact" id="editComplainantContact" class="form-control" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Address / Purok</label>
+                                <input type="text" name="complainantAddress" id="editComplainantAddress" class="form-control" />
+                            </div>
+                            <div class="col-md-12">
+                                <h6 class="form-sub-section">Respondent (Person Complained Of)</h6>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Full Name / Alias</label>
+                                <input type="text" name="respondentName" id="editRespondent" class="form-control" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Address / Purok</label>
+                                <input type="text" name="respondentAddress" id="editRespondentAddress" class="form-control" />
+                            </div>
+                            <div class="col-md-12">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="editVictimSame" onchange="syncVictimFromComplainant('editComplainant','editVictimSame','editVictim')" />
+                                    <label class="form-check-label" for="editVictimSame">Victim is the same as the complainant</label>
+                                </div>
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label">Victim (if different from complainant)</label>
+                                <input type="text" name="victimName" id="editVictim" class="form-control" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h6 class="form-section-title"><i class="bi bi-folder2-open"></i> C. Case Details &amp; Administrative Tracking</h6>
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <label class="form-label">Incident Narrative / Detailed Summary</label>
+                                <textarea name="narrative" id="editNarrative" class="form-control" rows="4" required></textarea>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Status</label>
+                                <select name="status" id="editStatus" class="form-select">
+                                    <option value="Under Investigation">Under Investigation</option>
+                                    <option value="Scheduled for Hearing">Scheduled for Hearing</option>
+                                    <option value="Resolved">Resolved</option>
+                                    <option value="Settled / Amicably Resolved">Settled / Amicably Resolved</option>
+                                    <option value="Referred to PNP">Referred to PNP</option>
+                                    <option value="Issued CFA">Issued CFA</option>
+                                    <option value="Dismissed">Dismissed</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Assigned Officer / Duty Tanod / Secretary</label>
+                                <input type="text" name="officer" id="editOfficer" class="form-control" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i> Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* ===================== UPDATE STATUS MODAL ===================== *@
+<div class="modal fade" id="caseStatusModal" tabindex="-1" aria-labelledby="caseStatusModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="caseStatusModalLabel">Update Case Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="statusCaseId" />
+                <div class="mb-3">
+                    <label class="form-label">Case ID</label>
+                    <input type="text" id="statusCaseIdDisplay" class="form-control" disabled />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Status</label>
+                    <select id="statusCaseSelect" class="form-select">
+                        @* "Open" was removed: a newly filed case no longer has a
+                           distinct open state, it simply counts as active work until
+                           it is resolved. The list below is the single source of
+                           truth for what a case can be marked as. *@
+                        <option value="Under Investigation">Under Investigation</option>
+                        <option value="Scheduled for Hearing">Scheduled for Hearing</option>
+                        <option value="Resolved">Resolved</option>
+                        <option value="Settled / Amicably Resolved">Settled / Amicably Resolved</option>
+                        <option value="Referred to PNP">Referred to PNP</option>
+                        <option value="Issued CFA">Issued CFA</option>
+                        <option value="Dismissed">Dismissed</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveStatusCase()">Save Status</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Summary card -> table filtering. Clicking OPEN / IN PROGRESS / RESOLVED
+        // filters the table to that bucket without a page reload.
+        //
+        // Bucket memberships are serialised from the controller so this filter and
+        // the card counters classify a case by exactly the same rule. Rows match on
+        // their data-status attribute; a case is only ever in one bucket.
+        (function () {
+            var table = document.querySelector('.custom-table');
+            var tbody = table ? table.querySelector('tbody') : null;
+            var statusFilter = document.getElementById('statusFilter');
+            if (!tbody) { return; }
+
+            // Emitted by the view from the same lists the counters use, so the client
+            // filter can never drift from the server. Html.Raw is required: Razor
+            // encodes the joining quotes to &#x27;, which would leave the array as
+            // a single string instead of a list. The values are server-side
+            // constants, so there is no user input to encode here.
+            //
+            // IN PROGRESS has no list of its own: it is the complement of RESOLVED.
+            // Only the resolved list is shipped, and the filter negates it, so a new
+            // resolved status cannot be added on the server without also updating
+            // this file.
+            var RESOLVED_STATUSES = @Html.Raw("['" + string.Join("', '", Model.ResolvedStatuses) + "']");
+
+            var norm = function (s) { return String(s == null ? '' : s).trim().toLowerCase(); };
+
+            var cards = Array.prototype.slice.call(
+                document.querySelectorAll('.mini-card[data-status-bucket]'));
+            if (!cards.length) { return; }
+
+            // Rows inserted over AJAX carry data-case-id too, so they are picked up
+            // the same way as the server-rendered ones.
+            function caseRows() {
+                return Array.prototype.slice.call(tbody.querySelectorAll('tr[data-case-id]'));
+            }
+
+            var activeBucket = null;
+
+            // Equality against the membership list, never a substring test:
+            // "Issued CFA" belongs to resolved and must never match open.
+            function matchesBucket(status, bucket) {
+                var value = norm(status);
+                if (!value) { return false; }
+
+                var resolved = RESOLVED_STATUSES.map(norm);
+
+                switch (bucket) {
+                    // The active workload: anything that is not resolved.
+                    case 'inprogress':
+                        return resolved.indexOf(value) < 0;
+
+                    case 'resolved':
+                        return resolved.indexOf(value) >= 0;
+
+                    default:
+                        return false;
+                }
+            }
+
+            function applyBucket(bucket) {
+                // Unknown bucket clears the filter rather than hiding every row. The
+                // OPEN card is gone, so nothing calls this with "open" any more, but a
+                // stray or stale call would otherwise blank the whole table.
+                if (bucket && bucket !== 'inprogress' && bucket !== 'resolved') {
+                    bucket = null;
+                }
+
+                activeBucket = bucket || null;
+
+                caseRows().forEach(function (tr) {
+                    if (!activeBucket) {
+                        tr.style.display = '';
+                        return;
+                    }
+
+                    tr.style.display = matchesBucket(tr.getAttribute('data-status'), activeBucket) ? '' : 'none';
+                });
+
+                // Only a class is toggled here -- the mini-card styling is untouched.
+                cards.forEach(function (card) {
+                    var isActive = !!activeBucket &&
+                        card.getAttribute('data-status-bucket') === activeBucket;
+
+                    card.classList.toggle('is-filtering', isActive);
+                    card.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                });
+            }
+
+            // Keeps the Status dropdown consistent with the card that was clicked.
+            // A card covers a whole bucket while the dropdown lists one status, so
+            // when no single option can represent the bucket the dropdown is reset
+            // to "All Statuses" rather than showing a value that would contradict
+            // the rows actually on screen.
+            function syncDropdown(bucket) {
+                if (!statusFilter || !bucket) { return; }
+
+                var options = Array.prototype.slice.call(statusFilter.options);
+                var matching = options.filter(function (o) {
+                    return o.value && matchesBucket(o.value, bucket);
+                });
+
+                if (matching.length === 1) {
+                    statusFilter.value = matching[0].value;
+                } else if (options.length) {
+                    statusFilter.value = '';
+                }
+            }
+
+            function onCardActivate(event) {
+                var bucket = event.currentTarget.getAttribute('data-status-bucket');
+                if (!bucket) { return; }
+
+                // Clicking the active card clears the filter, so the control is
+                // reversible rather than one-way.
+                var next = (activeBucket === bucket) ? null : bucket;
+
+                applyBucket(next);
+                syncDropdown(next);
+            }
+
+            cards.forEach(function (card) {
+                card.setAttribute('aria-pressed', 'false');
+                card.addEventListener('click', onCardActivate);
+
+                // Keyboard parity with the click handler.
+                card.addEventListener('keydown', function (event) {
+                    if (event.key !== 'Enter' && event.key !== ' ') { return; }
+                    event.preventDefault();
+                    onCardActivate(event);
+                });
+            });
+
+            // Exposed so the status dropdown's own handler can drive the same filter,
+            // and so the status modal can re-run the filter after a status change
+            // moves a row between buckets.
+            window.filterBlotterByBucket = applyBucket;
+
+            // Writes the three card counts and the hero banner from the values the
+            // server returned. The server recomputes them from the database, so this
+            // never has to reason about which bucket a case moved between -- it just
+            // renders what was sent. Only text content is touched; no class, style or
+            // layout property is set, so the cards keep their exact appearance.
+            window.applyBlotterCounts = function (counts) {
+                if (!counts) { return; }
+
+                var set = function (id, value) {
+                    if (typeof value !== 'number') { return; }
+                    var el = document.getElementById(id);
+                    if (el) { el.textContent = String(value); }
+                };
+
+                set('inProgressCount', counts.inProgress);
+                set('resolvedCount', counts.resolved);
+
+                // The hero banner tracks the unresolved workload, so it follows
+                // IN PROGRESS and re-applies the singular/plural wording.
+                if (typeof counts.inProgress === 'number') {
+                    var hero = document.getElementById('attentionCountText');
+                    if (hero) {
+                        hero.textContent = counts.inProgress +
+                            (counts.inProgress === 1 ? ' case needs' : ' cases need') +
+                            ' attention';
+                    }
+                }
+
+                // A row may have changed bucket, so re-apply whichever card filter
+                // is currently active rather than leaving a stale row on screen.
+                if (activeBucket) { applyBucket(activeBucket); }
+            };
+        })();
+
+        // The Dashboard's "File Blotter Report" quick action links here with
+        // ?openModal=true, but nothing consumed that parameter, so the user landed on
+        // the page with the dialog closed. Open it on arrival, then drop the parameter
+        // so a refresh does not immediately reopen it.
+        (function () {
+            var params = new URLSearchParams(window.location.search);
+            if (String(params.get('openModal')).toLowerCase() !== 'true') { return; }
+
+            var el = document.getElementById('caseModal');
+            if (!el || !window.bootstrap) { return; }
+
+            params.delete('openModal');
+            var query = params.toString();
+            window.history.replaceState({}, '', window.location.pathname + (query ? '?' + query : ''));
+
+            window.addEventListener('load', function () {
+                bootstrap.Modal.getOrCreateInstance(el).show();
+            });
+        })();
+
+        var currentViewCaseId = null;
+
+        function rowFromButton(btn) {
+            return btn.closest('tr');
+        }
+
+        function statusClass(status) {
+            switch (String(status || '').toLowerCase()) {
+                case 'under investigation': return 'investigation';
+                case 'scheduled for hearing': return 'hearing';
+                case 'settled / amicably resolved': return 'settled';
+                case 'referred to pnp': return 'pnp';
+                case 'issued cfa': return 'cfa';
+                case 'open': return 'open';
+                default: return 'open';
+            }
+        }
+
+        function priorityClass(priority) {
+            return String(priority || 'medium').toLowerCase();
+        }
+
+        function partiesHtml(item) {
+            return '<span class="party-name">' + escapeHtml(item.complainant || item.resident || '—') + '</span>' +
+                   '<span class="party-arrow">vs</span>' +
+                   '<span class="party-name">' + (item.respondent ? escapeHtml(item.respondent) : '—') + '</span>';
+        }
+
+        function caseRowHtml(item) {
+            return '<td class="case-id">' + escapeHtml(item.id) + '</td>' +
+                   '<td>' + escapeHtml(item.incidentType || item.title || '') + '</td>' +
+                   '<td><div class="parties-cell">' + partiesHtml(item) + '</div></td>' +
+                   '<td>' + escapeHtml(item.dateFiled || '') + '</td>' +
+                   '<td><span class="priority-tag priority-' + priorityClass(item.priority) + '">' + escapeHtml(item.priority || 'Medium') + '</span></td>' +
+                   '<td><span class="status-tag status-' + statusClass(item.status) + '">' + escapeHtml(item.status || 'Open') + '</span></td>' +
+                   '<td><div class="d-flex gap-1">' +
+                   '<button type="button" class="icon-btn-case icon-view" title="View Details" aria-label="View Details" onclick="openCaseView(this)"><i class="bi bi-eye"></i></button>' +
+                   '<button type="button" class="icon-btn-case icon-edit" title="Edit" aria-label="Edit" onclick="openEditCase(this)"><i class="bi bi-pencil"></i></button>' +
+                   '<button type="button" class="icon-btn-case icon-status" title="Update Status" aria-label="Update Status" onclick="openStatusCase(this)"><i class="bi bi-arrow-repeat"></i></button>' +
+                   '<button type="button" class="icon-btn-case icon-delete" title="Delete" aria-label="Delete" onclick="deleteCaseConfirm(this)"><i class="bi bi-trash"></i></button>' +
+                   '</div></td>';
+        }
+
+        function attachRowData(tr, item) {
+            tr.setAttribute('data-case-id', item.id);
+            tr.setAttribute('data-title', item.title);
+            tr.setAttribute('data-resident', item.resident);
+            tr.setAttribute('data-date', item.dateFiled);
+            tr.setAttribute('data-status', item.status);
+            tr.setAttribute('data-incident-type', item.incidentType);
+            tr.setAttribute('data-incident-date', item.incidentDate);
+            tr.setAttribute('data-location', item.location);
+            tr.setAttribute('data-priority', item.priority);
+            tr.setAttribute('data-complainant', item.complainant || item.resident);
+            tr.setAttribute('data-complainant-contact', item.complainantContact);
+            tr.setAttribute('data-complainant-address', item.complainantAddress);
+            tr.setAttribute('data-respondent', item.respondent);
+            tr.setAttribute('data-respondent-address', item.respondentAddress);
+            tr.setAttribute('data-victim', item.victim);
+            tr.setAttribute('data-narrative', item.narrative);
+            tr.setAttribute('data-officer', item.officer);
+        }
+
+        function fetchCase(id) {
+            return fetch('/Home/GetBlotterCase?id=' + encodeURIComponent(id))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.success) return data.item;
+                    throw new Error('case not found');
+                });
+        }
+
+        function renderTimeline(container, notes) {
+            if (!container) return;
+            if (!notes || notes.length === 0) {
+                container.innerHTML = '<div class="text-muted small">No updates logged yet.</div>';
+                return;
+            }
+            container.innerHTML = '';
+            notes.forEach(function (note, idx) {
+                var sep = note.indexOf(' - ');
+                var time = sep > -1 ? note.substring(0, sep) : '';
+                var text = sep > -1 ? note.substring(sep + 3) : note;
+                var item = document.createElement('div');
+                item.className = 'note-item';
+                item.innerHTML = '<div class="note-marker"></div>' +
+                    '<div class="note-body"><div class="note-time">' + escapeHtml(time) + '</div>' +
+                    '<div class="note-text">' + escapeHtml(text) + '</div></div>';
+                container.appendChild(item);
+            });
+        }
+
+        function openCaseView(btn) {
+            var tr = rowFromButton(btn);
+            if (!tr) return;
+            var body = document.getElementById('caseViewBody');
+            if (!body) return;
+            currentViewCaseId = null;
+
+            body.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border text-primary" role="status"></div></div>';
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('caseViewModal')).show();
+
+            fetchCase(tr.dataset.caseId).then(function (item) {
+                currentViewCaseId = item.id;
+                body.innerHTML =
+                    '<div class="d-flex flex-wrap align-items-center gap-2 mb-3">' +
+                    '<h6 class="mb-0 fw-bold">' + escapeHtml(item.id) + '</h6>' +
+                    '<span class="status-tag status-' + statusClass(item.status) + '">' + escapeHtml(item.status) + '</span>' +
+                    '<span class="priority-tag priority-' + priorityClass(item.priority) + '">' + escapeHtml(item.priority) + '</span>' +
+                    '</div>' +
+                    '<div class="detail-grid mb-3">' +
+                    '<div><span class="detail-label">Incident Type</span><span>' + escapeHtml(item.incidentType || '—') + '</span></div>' +
+                    '<div><span class="detail-label">Location</span><span>' + escapeHtml(item.location || '—') + '</span></div>' +
+                    '<div><span class="detail-label">Incident Date &amp; Time</span><span>' + escapeHtml(item.incidentDate || '—') + '</span></div>' +
+                    '<div><span class="detail-label">Date Reported</span><span>' + escapeHtml(item.dateFiled || '—') + '</span></div>' +
+                    '<div><span class="detail-label">Assigned Officer</span><span>' + escapeHtml(item.officer || '—') + '</span></div>' +
+                    '</div>' +
+                    '<div class="row g-3 mb-3">' +
+                    '<div class="col-md-6"><div class="party-box"><h6 class="form-sub-section mb-2">Complainant</h6>' +
+                    '<div><strong>' + escapeHtml(item.complainant || item.resident || '—') + '</strong></div>' +
+                    '<div class="detail-label">Contact: ' + escapeHtml(item.complainantContact || '—') + '</div>' +
+                    '<div class="detail-label">Address: ' + escapeHtml(item.complainantAddress || '—') + '</div></div></div>' +
+                    '<div class="col-md-6"><div class="party-box"><h6 class="form-sub-section mb-2">Respondent</h6>' +
+                    '<div><strong>' + escapeHtml(item.respondent || '—') + '</strong></div>' +
+                    '<div class="detail-label">Address: ' + escapeHtml(item.respondentAddress || '—') + '</div>' +
+                    '<div class="detail-label">Victim: ' + escapeHtml(item.victim || item.complainant || item.resident || '—') + '</div></div></div>' +
+                    '</div>' +
+                    '<div class="narrative-box mb-3"><div class="detail-label mb-1">Incident Narrative</div>' +
+                    '<div>' + escapeHtml(item.narrative || '—') + '</div></div>' +
+                    '<h6 class="form-sub-section">Log / Notes Timeline</h6>' +
+                    '<div class="notes-timeline mb-3" id="notesTimeline"></div>' +
+                    '<div class="d-flex gap-2 note-add">' +
+                    '<input type="text" id="noteInput" class="form-control" placeholder="Log hearing update or note..." />' +
+                    '<button type="button" class="btn btn-primary btn-sm whitespace-nowrap" onclick="addNote()">Add Note</button>' +
+                    '</div>';
+
+                renderTimeline(document.getElementById('notesTimeline'), item.notes || []);
+            }).catch(function (e) {
+                console.error(e);
+                body.innerHTML = '<div class="text-danger">Unable to load case details.</div>';
+            });
+        }
+
+        function addNote() {
+            if (!currentViewCaseId) return;
+            var input = document.getElementById('noteInput');
+            var note = (input.value || '').trim();
+            if (!note) { input.focus(); return; }
+            postJson('/Home/AddBlotterNote', 'id=' + encodeURIComponent(currentViewCaseId) + '&note=' + encodeURIComponent(note))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.success) {
+                        fetchCase(currentViewCaseId).then(function (item) {
+                            var timeline = document.getElementById('notesTimeline');
+                            if (timeline) renderTimeline(timeline, item.notes || []);
+                        });
+                        input.value = '';
+                        showToast('Update logged.', 'success');
+                    } else {
+                        showToast('Unable to log update.', 'danger');
+                    }
+                })
+                .catch(function () { showToast('Unable to log update.', 'danger'); });
+        }
+
+        function openEditCase(btn) {
+            var tr = rowFromButton(btn);
+            if (!tr) return;
+            fetchCase(tr.dataset.caseId).then(function (item) {
+                document.getElementById('editCaseId').value = item.id;
+                document.getElementById('editIncidentType').value = item.incidentType || '';
+                document.getElementById('editIncidentDate').value = item.incidentDate || '';
+                document.getElementById('editLocation').value = item.location || '';
+                document.getElementById('editPriority').value = item.priority || 'Medium';
+                document.getElementById('editComplainant').value = item.complainant || item.resident || '';
+                document.getElementById('editComplainantContact').value = item.complainantContact || '';
+                document.getElementById('editComplainantAddress').value = item.complainantAddress || '';
+                document.getElementById('editRespondent').value = item.respondent || '';
+                document.getElementById('editRespondentAddress').value = item.respondentAddress || '';
+                document.getElementById('editNarrative').value = item.narrative || '';
+                document.getElementById('editOfficer').value = item.officer || '';
+                document.getElementById('editStatus').value = item.status || 'Open';
+                var v = item.victim || '';
+                document.getElementById('editVictim').value = v;
+                var same = (v || '').trim() === '';
+                document.getElementById('editVictimSame').checked = same;
+                document.getElementById('editVictim').disabled = same;
+                document.getElementById('editVictim').placeholder = same ? 'Same as complainant' : 'Victim full name';
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('caseEditModal')).show();
+            }).catch(function (e) { console.error(e); showToast('Unable to load case.', 'danger'); });
+        }
+
+        function saveEditCase() {
+            var form = document.getElementById('blotterEditForm');
+            if (!form) return;
+            fetch(form.action, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: new FormData(form) })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.success) {
+                        var tr = document.querySelector('tr[data-case-id="' + data.item.id + '"]');
+                        if (tr) {
+                            attachRowData(tr, data.item);
+                            tr.innerHTML = caseRowHtml(data.item);
+                        }
+                        bootstrap.Modal.getInstance(document.getElementById('caseEditModal')).hide();
+                        showToast('Blotter case updated.', 'success');
+                    } else {
+                        showToast('Unable to update case.', 'danger');
+                    }
+                })
+                .catch(function (e) { console.error(e); showToast('Unable to update case.', 'danger'); });
+        }
+
+        function openStatusCase(btn) {
+            var tr = rowFromButton(btn);
+            if (!tr) return;
+            document.getElementById('statusCaseId').value = tr.dataset.caseId;
+            document.getElementById('statusCaseIdDisplay').value = tr.dataset.caseId;
+            document.getElementById('statusCaseSelect').value = tr.dataset.status;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('caseStatusModal')).show();
+        }
+
+        function saveStatusCase() {
+            var id = document.getElementById('statusCaseId').value;
+            var newStatus = document.getElementById('statusCaseSelect').value;
+            if (!id) return;
+            postJson('/Home/UpdateBlotterStatus', 'id=' + encodeURIComponent(id) + '&newStatus=' + encodeURIComponent(newStatus))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.success) {
+                        var tr = document.querySelector('tr[data-case-id="' + id + '"]');
+                        if (tr) {
+                            tr.dataset.status = data.item.status;
+                            var st = tr.querySelector('.status-tag');
+                            if (st) { st.className = 'status-tag status-' + statusClass(data.item.status); st.textContent = data.item.status; }
+                        }
+
+                        // Push the counts the server recomputed. Doing this before the
+                        // modal closes means the cards and the row update in the same
+                        // frame, so there is no flash where the badge says "Resolved"
+                        // while the cards still show the old totals.
+                        if (typeof window.applyBlotterCounts === 'function') {
+                            window.applyBlotterCounts(data.counts);
+                        }
+
+                        bootstrap.Modal.getInstance(document.getElementById('caseStatusModal')).hide();
+                        showToast('Blotter case updated.', 'success');
+                    } else {
+                        showToast('Unable to update case.', 'danger');
+                    }
+                })
+                .catch(function (e) { console.error(e); showToast('Unable to update case.', 'danger'); });
+        }
+
+        function deleteCaseConfirm(btn) {
+            var tr = rowFromButton(btn);
+            if (!tr) return;
+            var id = tr.dataset.caseId;
+            if (!confirm('Delete blotter case ' + id + '?')) return;
+            postJson('/Home/DeleteBlotter', 'id=' + encodeURIComponent(id))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.success) {
+                        tr.remove();
+                        showToast('Blotter case deleted.', 'success');
+                    } else {
+                        showToast('Unable to delete case.', 'danger');
+                    }
+                })
+                .catch(function () { showToast('Unable to delete case.', 'danger'); });
+        }
+
+        function syncVictimFromComplainant(sourceId, checkboxId, victimId) {
+            var cb = document.getElementById(checkboxId);
+            var inp = document.getElementById(victimId);
+            var src = document.getElementById(sourceId);
+            if (!cb || !inp) return;
+            if (cb.checked) {
+                inp.value = '';
+                inp.disabled = true;
+                inp.placeholder = 'Same as complainant';
+            } else {
+                inp.disabled = false;
+                inp.placeholder = 'Victim full name';
+                if (!inp.value && src) inp.value = src.value;
+                inp.focus();
+            }
+        }
+
+        (function () {
+            var form = document.getElementById('blotterCreateForm');
+            if (!form) return;
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var fd = new FormData(form);
+                fetch(form.action, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data && data.success) {
+                            var modalEl = document.getElementById('caseModal');
+                            var bs = bootstrap.Modal.getInstance(modalEl);
+                            if (bs) bs.hide();
+                            var tbody = document.querySelector('.custom-table tbody');
+                            if (tbody) {
+                                var tr = document.createElement('tr');
+                                attachRowData(tr, data.item);
+                                tr.innerHTML = caseRowHtml(data.item);
+                                tbody.insertBefore(tr, tbody.firstChild);
+                            }
+                            showToast('Blotter case created.', 'success');
+                            form.reset();
+                        } else {
+                            showToast('Unable to create case.', 'danger');
+                        }
+                    })
+                    .catch(function () { showToast('Unable to create case.', 'danger'); });
+            });
+
+            var editForm = document.getElementById('blotterEditForm');
+            if (editForm) {
+                editForm.addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    saveEditCase();
+                });
+            }
+        })();
+    </script>
+}

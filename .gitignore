@@ -1,0 +1,58 @@
+## Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.swp
+
+## Secrets and local-only configuration.
+## Real values live in user-secrets (dotnet user-secrets) or in the
+## ConnectionStrings__DefaultConnection / BDIMS__Admin__* environment
+## variables. Never commit them here.
+appsettings.Local.json
+appsettings.*.Local.json
+.env
+.env.*
+secrets.json
+
+## Runtime data written by the application. Certificate layouts are
+## persisted to App_Data/certificate_templates.json at runtime; that file
+## holds administrator-authored content and manual edits, so it is not
+## source. A seed copy ships as App_Data/certificate_templates.seed.json.
+##
+## The leading ** is required: a pattern containing a slash is anchored to the
+## repository root, so "App_Data/*.json" never matched "BDIMS/App_Data/..." and
+## the runtime file was committed despite the rule.
+**/App_Data/*.json
+!**/App_Data/*.seed.json
+**/App_Data/*.tmp
+**/App_Data/*.corrupt-*
+**/App_Data/*.bak
+
+## Local database and logs
+*.mdf
+*.ldf
+*.db
+*.db-shm
+*.db-wal
+logs/
+*.log
+
+## OS / editor cruft
+Thumbs.db
+Desktop.ini
+.DS_Store
+*~
+
+## Stray scratch files
+query

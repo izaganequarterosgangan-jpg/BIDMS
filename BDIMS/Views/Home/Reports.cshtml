@@ -1,0 +1,220 @@
+@model BDIMS.Models.ReportsViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Reports";
+}
+
+<link rel="stylesheet" href="~/css/Reports.css" asp-append-version="true" />
+
+<header class="top-header">
+    <div>
+        <h2 class="header-title">Reports</h2>
+        <p class="header-subtitle">Review summaries and performance insights.</p>
+    </div>
+    <div class="header-actions">
+        <form method="get" asp-action="Reports" asp-controller="Home" class="search-box">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+            <input type="text" id="searchInput" name="searchQuery" value="@Model.SearchQuery" placeholder="Search reports..." onkeyup="filterTable()" />
+        </form>
+        <button type="button" class="action-button" onclick="openGenerateModal()">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            Generate
+        </button>
+    </div>
+</header>
+
+<div class="content-area">
+    <div class="hero-card">
+        <div>
+            <p class="eyebrow">REPORT CENTER</p>
+            <h3>@Model.TotalCount report@(Model.TotalCount != 1 ? "s" : "") available</h3>
+            <p>Generate and review essential barangay summaries.</p>
+        </div>
+        <div class="pill">Fresh data</div>
+    </div>
+
+    <div class="stats-row">
+        <div class="mini-card success">
+            <span class="mini-label">Prepared / Ready</span>
+            <strong>@Model.PreparedCount</strong>
+        </div>
+        <div class="mini-card warning">
+            <span class="mini-label">Pending Review</span>
+            <strong>@Model.PendingCount</strong>
+        </div>
+        <div class="mini-card info">
+            <span class="mini-label">Total Reports</span>
+            <strong>@Model.TotalCount</strong>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-header">
+            <h4>Recent Reports</h4>
+            <button type="button" class="secondary-btn" onclick="exportTableToCSV()">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M8 13h2" /><path d="M8 17h2" /><path d="M14 13h2" /><path d="M14 17h2" /></svg>
+                Export
+            </button>
+        </div>
+
+        <table class="custom-table" id="reportsTable">
+            <thead>
+                <tr>
+                    <th>Report Name</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Reports.Any())
+                {
+                    foreach (var item in Model.Reports)
+                    {
+                        <tr data-title="@item.Title.ToLower()" data-date="@item.Date.ToLower()" data-status="@item.Status.ToLower()"
+                            data-label-title="@item.Title" data-label-date="@item.Date" data-label-status="@item.Status">
+                            <td class="report-title-cell">@item.Title</td>
+                            <td>@item.Date</td>
+                            <td><span class="status-badge @item.Status.ToLower().Replace(" ", "-")">@item.Status</span></td>
+                            <td style="text-align:right;">
+                                <div class="action-buttons-group">
+                                    <button type="button" class="icon-btn view" title="View Report" data-action="view-report">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                                    </button>
+                                    <form method="post" asp-action="DeleteReport" asp-controller="Home" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this report?');">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@item.Id" />
+                                        <button type="submit" class="icon-btn delete" title="Delete Report">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+                <tr id="emptyRow" style="display:@(Model.Reports.Any() ? "none" : "table-row")">
+                    <td colspan="4" class="empty-table-msg">No records found. Click <strong>Generate</strong> to create your first real report.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@* Reuse modal and scripts from previous implementation *@
+<div id="reportModalOverlay" class="modal-overlay" onclick="closeReportModal(event)">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="reportModalTitle">Modal Title</h3>
+            <button type="button" class="modal-close-btn" onclick="closeReportModalForce()">&times;</button>
+        </div>
+        <div class="modal-body" id="reportModalBody"></div>
+    </div>
+</div>
+
+<template id="generateFormTemplate">
+    <form method="post" asp-action="CreateReport" asp-controller="Home" class="modal-form">
+        @Html.AntiForgeryToken()
+        <div class="form-group">
+            <label>Report Name</label>
+            <input type="text" name="title" required placeholder="e.g. Q3 Demographic Summary" class="modal-input" />
+        </div>
+        <div class="form-group">
+            <label>Date</label>
+            <input type="date" name="date" required value="@DateTime.Now.ToString("yyyy-MM-dd")" class="modal-input" />
+        </div>
+        <div class="form-group">
+            <label>Status</label>
+            <select name="status" class="modal-input"><option value="Prepared">Prepared</option><option value="Pending Review">Pending Review</option><option value="Ready">Ready</option></select>
+        </div>
+        <button type="submit" class="modal-submit-btn">Generate Report</button>
+    </form>
+</template>
+
+@section Scripts {
+    <script>
+        function openGenerateModal() {
+            document.getElementById('reportModalTitle').innerText = 'Generate New Report';
+            const templateContent = document.getElementById('generateFormTemplate').content.cloneNode(true);
+            const modalBody = document.getElementById('reportModalBody');
+            modalBody.innerHTML = '';
+            modalBody.appendChild(templateContent);
+            document.getElementById('reportModalOverlay').classList.add('active');
+        }
+
+        function openViewModal(title, date, status) {
+            document.getElementById('reportModalTitle').innerText = 'View Report: ' + title;
+
+            // Built with DOM nodes rather than an innerHTML string: the report title is
+            // clerk-supplied, and Razor HTML-encodes a value that lands in an attribute
+            // correctly, but a value interpolated into a JavaScript string literal inside
+            // an onclick attribute does not get that protection.
+            const body = document.getElementById('reportModalBody');
+            body.textContent = '';
+
+            const wrap = document.createElement('div');
+            wrap.className = 'report-view-details';
+
+            [['Title: ', title], ['Date Generated: ', date], ['Status: ', status]].forEach(pair => {
+                const p = document.createElement('p');
+                const strong = document.createElement('strong');
+                strong.textContent = pair[0];
+                p.appendChild(strong);
+                p.appendChild(document.createTextNode(pair[1] || ''));
+                wrap.appendChild(p);
+            });
+
+            const note = document.createElement('p');
+            note.className = 'report-placeholder-text';
+            note.textContent = 'This report contains dynamic aggregate data from the BIDMS system databases including resident counts, document processing metrics, and clearance issuances.';
+            wrap.appendChild(note);
+
+            body.appendChild(wrap);
+            document.getElementById('reportModalOverlay').classList.add('active');
+        }
+
+        // Delegated so the report title never has to be embedded in an inline handler.
+        document.addEventListener('click', function (event) {
+            const button = event.target.closest('[data-action="view-report"]');
+            if (!button) { return; }
+            const row = button.closest('tr');
+            if (!row) { return; }
+            openViewModal(
+                row.getAttribute('data-label-title') || '',
+                row.getAttribute('data-label-date') || '',
+                row.getAttribute('data-label-status') || '');
+        });
+
+        function closeReportModal(event) { if (event && event.target.id === 'reportModalOverlay') closeReportModalForce(); }
+        function closeReportModalForce() { document.getElementById('reportModalOverlay').classList.remove('active'); }
+
+        function filterTable() {
+            const query = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+            const rows = document.querySelectorAll('#reportsTable tbody tr:not(#emptyRow)');
+            let visibleCount = 0;
+            rows.forEach(row => {
+                const title = row.getAttribute('data-title') || '';
+                const date = row.getAttribute('data-date') || '';
+                const status = row.getAttribute('data-status') || '';
+                if (title.includes(query) || date.includes(query) || status.includes(query)) { row.style.display = ''; visibleCount++; } else { row.style.display = 'none'; }
+            });
+            const emptyRow = document.getElementById('emptyRow'); if (emptyRow) emptyRow.style.display = visibleCount === 0 ? 'table-row' : 'none';
+        }
+
+        // Excel and LibreOffice evaluate a leading = + - or at-sign as a formula, so a
+        // report titled "=cmd|..." would otherwise execute when the export is opened.
+        function csvCell(value) {
+            const text = String(value == null ? '' : value);
+            const safe = /^[=+\-@@\t\r]/.test(text) ? "'" + text : text;
+            return '"' + safe.replace(/"/g, '""') + '"';
+        }
+
+        function exportTableToCSV() {
+            const rows = document.querySelectorAll('#reportsTable tbody tr:not(#emptyRow)');
+            const exportRows = [];
+            rows.forEach(row => { if (row.style.display !== 'none') { exportRows.push([csvCell(row.cells[0].innerText.trim()), csvCell(row.cells[1].innerText.trim()), csvCell(row.cells[2].innerText.trim())].join(',')); } });
+            if (exportRows.length === 0) { alert('No data available to export.'); return; }
+            const csvContent = 'Report Title,Date,Status\n' + exportRows.join('\n'); const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `BIDMS_Reports_${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        }
+    </script>
+}

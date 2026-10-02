@@ -1,0 +1,80 @@
+﻿/* Modal Overlay Styling */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-container {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 950px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.modal-close {
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #64748b;
+}
+
+.modal-preview-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.print-modal-btn {
+    align-self: flex-end;
+    width: auto;
+    padding: 10px 24px;
+}
+
+/* Print Overrides */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    .print-hide, .modal-backdrop, .sidebar, .top-header, .header-actions {
+        display: none !important;
+    }
+
+    .print-only, .print-only * {
+        visibility: visible;
+    }
+
+    .print-only {
+        display: block !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+
+    .certificate-paper {
+        border: none;
+        padding: 0;
+        box-shadow: none;
+    }
+}

@@ -1,0 +1,204 @@
+﻿/* ================================
+   MODAL
+================================ */
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 20px;
+}
+
+    .modal-overlay.show {
+        display: flex;
+    }
+
+.modal-container {
+    width: 100%;
+    max-width: 550px;
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+    animation: modalAppear 0.2s ease;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+    .modal-header h2 {
+        margin: 0;
+        color: #0f172a;
+        font-size: 20px;
+    }
+
+.modal-close {
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: #f1f5f9;
+    color: #475569;
+    border-radius: 8px;
+    font-size: 22px;
+    cursor: pointer;
+}
+
+    .modal-close:hover {
+        background: #e2e8f0;
+    }
+
+@keyframes modalAppear {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+/* ================================
+   RESPONSIVE
+================================ */
+
+@media (max-width: 1000px) {
+
+    .sidebar {
+        width: 220px;
+    }
+
+    .main-content {
+        padding: 20px;
+    }
+
+    .custom-table {
+        min-width: 850px;
+    }
+
+    .table-card {
+        overflow-x: auto;
+    }
+}
+
+
+@media (max-width: 768px) {
+
+    .page-shell {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        min-height: auto;
+    }
+
+    .nav-list {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .sidebar-user {
+        margin-top: 20px;
+    }
+
+    .top-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .header-actions {
+        width: 100%;
+    }
+
+    .search-box {
+        flex: 1;
+    }
+
+    .stats-row {
+        grid-template-columns: 1fr;
+    }
+
+    .hero-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Row delete control --------------------------------------------------------
+   Both the server-rendered rows and rows added live over AJAX use .delete-btn.
+   Nothing styled it, so it fell back to the browser's default grey button and
+   broke the look of the action column. These rules reproduce exactly the inline
+   styling site.js used to hard-code on its own delete button. */
+.action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.delete-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    padding: 0;
+    color: #ef4444;
+    font-size: 0.8125rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.delete-btn:hover {
+    color: #b91c1c;
+}
+
+.delete-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Row edit control --------------------------------------------------------
+   Deliberately an exact structural copy of .delete-btn above -- same flex
+   layout, same icon sizing, same font -- so adding the second control in the
+   ACTION column does not change the height or alignment of the row. Only the
+   colour differs: the destructive red is kept for Delete, and Edit wears the
+   same navy (#0b194c) the .action-button primary uses elsewhere in the app. */
+.edit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    padding: 0;
+    color: #0b194c;
+    font-size: 0.8125rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.edit-btn:hover {
+    color: #152766;
+}
+
+.edit-btn svg {
+    width: 16px;
+    height: 16px;
+}
+

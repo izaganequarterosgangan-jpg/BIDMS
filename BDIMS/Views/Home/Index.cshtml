@@ -1,0 +1,146 @@
+﻿@{
+    Layout = null;
+    var loginError = ViewData["LoginError"] as string;
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login - BIDMS</title>
+    <link rel="stylesheet" href="~/css/login.css" />
+</head>
+<body>
+    <div class="login-page-container">
+        <!-- Left Banner Section -->
+        <div class="left-banner">
+            <div class="banner-content">
+                <div class="seal-header">
+                    <div class="seal-circle">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="5" />
+                            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="republic-text">REPUBLIC OF THE PHILIPPINES</div>
+                        <div class="lgu-text">Local Government Unit</div>
+                    </div>
+                </div>
+
+                <h1 class="main-heading">
+                    Barangay <br />
+                    <span class="gold-text">Information</span> <br />
+                    &amp; Document <br />
+                    <span class="regular-text">Management System</span>
+                </h1>
+
+                <p class="sub-text">
+                    A unified digital platform for efficient barangay governance, resident record management, and document processing.
+                </p>
+
+                <div class="badge-group">
+                    <span class="badge">Resident Records</span>
+                    <span class="badge">Document Requests</span>
+                    <span class="badge">Blotter Reports</span>
+                    <span class="badge">Certificates</span>
+                </div>
+
+                <div class="left-footer">
+                    DILG-compliant • Secure &amp; Encrypted • Version 2.4.1
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Login Form Section -->
+        <div class="right-section">
+            <div class="form-container">
+                <img src="~/images/Logo.png" alt="BIDMS Logo" class="logo-image" />
+                <p class="welcome-sub">
+                    Sign in to your official BIDMS account to continue.
+                </p>
+
+                <form asp-controller="Home" asp-action="Login" method="post" class="form-group-col">
+                    <!-- Username Input -->
+                    <div class="input-group">
+                        <label class="input-label">EMAIL / USERNAME</label>
+                        <div class="input-wrapper">
+                            <span class="input-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                            </span>
+                            <input type="text" name="username" placeholder="Enter your email or username" class="form-input" required />
+                        </div>
+                    </div>
+
+                    <!-- Password Input -->
+                    <div class="input-group">
+                        <div class="password-header">
+                            <label class="input-label">PASSWORD</label>
+                            <a href="#forgot" class="forgot-link">Forgot password?</a>
+                        </div>
+                        <div class="input-wrapper">
+                            <span class="input-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                            </span>
+                            <input type="password" id="passwordInput" name="password" placeholder="Enter your password" class="form-input" required />
+                            <span class="eye-icon" onclick="togglePasswordVisibility()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Checkbox -->
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="keepSigned" name="keepSigned" value="true" class="checkbox-input" />
+                        <label for="keepSigned" class="checkbox-label">Keep me signed in</label>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(loginError))
+                    {
+                        <p class="error-text">@loginError</p>
+                    }
+
+                    <button type="submit" class="sign-in-btn">
+                        Sign In to BIDMS &rarr;
+                    </button>
+                </form>
+
+                <div class="divider">
+                    <span class="divider-line"></span>
+                    <span class="divider-text">or</span>
+                    <span class="divider-line"></span>
+                </div>
+
+                <button class="qr-btn" type="button">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" style="margin-right: 8px;"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
+                    Sign in with QR Code / PIN
+                </button>
+
+                <p class="legal-text">
+                    Access restricted to authorized barangay personnel only.<br />
+                    Unauthorized access is a violation of <strong>RA 10173 (Data Privacy Act)</strong>.
+                </p>
+            </div>
+
+            <div class="right-footer">
+                <span>© 2024 Barangay LGU - BIDMS</span>
+                <span class="status-dot">
+                    <span class="green-dot"></span> Systems Operational
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+            function togglePasswordVisibility() {
+                const passwordInput = document.getElementById('passwordInput');
+                if (passwordInput.type === 'password') {
+                    passwordInput.type = 'text';
+                } else {
+                    passwordInput.type = 'password';
+                }
+            }
+    </script>
+</body>
+</html>

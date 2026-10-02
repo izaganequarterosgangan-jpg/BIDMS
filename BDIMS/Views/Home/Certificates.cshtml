@@ -1,0 +1,237 @@
+@inject Microsoft.Extensions.Options.IOptions<BDIMS.Models.BarangayOptions> BarangayCfg
+@using System.Text.Json
+@model BDIMS.Models.CertificatesViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Certificates";
+
+    // Default address prefilled in the issue modal, built from the configured
+    // barangay identity so it follows configuration instead of a hardcoded string.
+    var defaultAddress = $"{BarangayCfg.Value.BarangayName}, {BarangayCfg.Value.Municipality}, {BarangayCfg.Value.Province}";
+}
+
+<header class="top-header">
+    <div>
+        <h2 class="header-title">Certificates</h2>
+        <p class="header-subtitle">Manage issued barangay certificates and records.</p>
+    </div>
+    <div class="header-actions">
+        <form method="get" asp-action="Certificates" class="search-box">
+            <input type="text" name="searchQuery" value="@Model.SearchQuery" placeholder="Search certificates" />
+        </form>
+        <button type="button" class="action-button" data-bs-toggle="modal" data-bs-target="#issueModal">
+            + Issue Walk-in Certificate
+        </button>
+    </div>
+</header>
+
+<div class="content-area">
+    <div class="hero-card">
+        <div>
+            <p class="eyebrow">CERTIFICATE TRACKER</p>
+            <h3>@Model.IssuedThisWeekCount certificates issued this week</h3>
+            <p>Review recent records and verify document completeness.</p>
+        </div>
+        <div class="pill">Ready to print</div>
+    </div>
+
+    <div class="stats-row">
+        <div class="mini-card success">
+            <span class="mini-label">Issued This Week</span>
+            <strong>@Model.IssuedThisWeekCount</strong>
+        </div>
+        <div class="mini-card warning">
+            <span class="mini-label">Awaiting Pickup</span>
+            <strong>@Model.AwaitingPickupCount</strong>
+        </div>
+        <div class="mini-card info">
+            <span class="mini-label">Printed</span>
+            <strong>@Model.PrintedCount</strong>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-header">
+            <h4>Recent Certificates</h4>
+            <button type="button" class="secondary-btn">Export</button>
+        </div>
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Certificate ID</th>
+                    <th>Type</th>
+                    <th>Resident</th>
+                    <th>Purpose</th>
+                    <th>Date Issued</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Certificates.Any())
+                {
+                    @foreach (var item in Model.Certificates)
+                    {
+                        <tr>
+                            <td>@item.Id</td>
+                            <td>@item.Title</td>
+                            <td>@item.Resident</td>
+                            <td>@item.Purpose</td>
+                            <td>@item.Issued</td>
+                            <td>
+                                <span class="status-pill @(item.Status == "Pending" ? "status-pending" : item.Status == "Printed" ? "status-complete" : "status-ready")">
+                                    @item.Status
+                                </span>
+                            </td>
+                            <td>
+                                <div class="action-cell">
+                                    <button type="button" class="icon-btn" title="Preview" data-action="preview"
+                                            data-id="@item.Id" data-title="@item.Title" data-resident="@item.Resident"
+                                            data-age="@item.ResidentAge" data-purok="@item.Purok" data-address="@item.Address"
+                                            data-purpose="@item.Purpose" data-issued="@item.IssuedDateDisplay" data-ornumber="@item.OrNumber"
+                                            data-amount="@item.AmountPaid">
+                                        👁️
+                                    </button>
+                                    <button type="button" class="icon-btn print-icon-btn" title="Print" data-action="print"
+                                            data-id="@item.Id" data-title="@item.Title" data-resident="@item.Resident"
+                                            data-age="@item.ResidentAge" data-purok="@item.Purok" data-address="@item.Address"
+                                            data-purpose="@item.Purpose" data-issued="@item.IssuedDateDisplay" data-ornumber="@item.OrNumber"
+                                            data-amount="@item.AmountPaid">
+                                        🖨️
+                                    </button>
+                                    <button type="button" class="icon-btn" title="Delete" data-action="delete"
+                                            data-id="@item.Id">
+                                        🗑️
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">No records found. Click <strong>Issue Walk-in Certificate</strong> to add your first real certificate.</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<datalist id="certResidentsDatalist">
+    @foreach (var r in Model.Residents)
+    {
+        <option value="@r.Name">@r.Purok</option>
+    }
+</datalist>
+
+<div id="issueModal" class="modal fade" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Issue Walk-in Certificate</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-action="CreateCertificate" method="post" id="issueCertificateForm">
+                @Html.AntiForgeryToken()
+                <div class="modal-body d-flex flex-column gap-3">
+                    <label class="form-label">Resident Name
+                        <input type="text" name="resident" id="formResident" class="form-control"
+                               list="certResidentsDatalist" autocomplete="off" required />
+                    </label>
+                    <p class="form-text mb-0">Pick a name on the roster to fill Age and Purok, or type a walk-in name and enter them yourself.</p>
+
+                    <div class="row g-2">
+                        <div class="col">
+                            <label class="form-label">Resident Age
+                                <input type="number" name="residentAge" id="formResidentAge"
+                                       min="1" max="130" class="form-control" placeholder="17" />
+                            </label>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">Purok
+                                <select name="purok" id="formPurok" class="form-select">
+                                    <option value="">-- Select Purok --</option>
+                                    @foreach (var p in Model.Puroks)
+                                    {
+                                        <option value="@p">@p</option>
+                                    }
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+
+                    <label class="form-label">Address
+                        <input type="text" name="address" id="formAddress"
+                               value="@defaultAddress" class="form-control" />
+                    </label>
+
+                    <label class="form-label">Certificate Type
+                        <select name="title" id="formTitle" class="form-select" required>
+                            @foreach (var cert in Model.CertificateTypes)
+                            {
+                                <option value="@cert.Type" data-fee="@cert.Fee" data-requires-residency="@cert.RequiresResidency">@cert.Type</option>
+                            }
+                        </select>
+                    </label>
+
+                    <div id="formatPreviewWrap" class="format-preview-wrap" style="display:none">
+                        <span class="form-label">Format Template</span>
+                        <pre id="formFormatPreview" style="white-space:pre-wrap;background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;padding:12px;max-height:220px;overflow:auto;margin:6px 0 0;"></pre>
+                    </div>
+
+                    <label class="form-label">Purpose
+                        <input type="text" name="purpose" id="formPurpose" class="form-control" required />
+                    </label>
+
+                    <div class="row g-2">
+                        <div class="col">
+                            <label class="form-label">Date Issued
+                                <input type="date" name="issueDate" id="formIssueDate" class="form-control"
+                                       value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                            </label>
+                            <p class="form-text mb-0" id="issueDatePreview"></p>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">O.R. Number
+                                <input type="text" name="orNumber" id="formOrNumber" class="form-control" />
+                            </label>
+                        </div>
+                    </div>
+
+                    <label class="form-label">Amount Paid (₱)
+                        <input type="text" name="amountPaid" id="formAmountPaid" class="form-control" readonly />
+                    </label>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="primary-modal-btn">Save &amp; Issue Certificate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="previewModal" class="modal fade" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="previewModalTitle">Certificate Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="modalPreviewContainer"></div>
+                <div class="modal-footer">
+                    <button type="button" class="primary-modal-btn" data-action="print-preview">🖨️ Print Document</button>
+                </div>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <form id="certActionToken" method="post" style="display:none;">@Html.AntiForgeryToken()</form>
+    <script src="~/js/certificate-print.js" asp-append-version="true"></script>
+    <script id="certResidentsJson" type="application/json">@Html.Raw(Json.Serialize(Model.Residents.Select(r => new { name = r.Name, age = (r.AgeSex ?? "").Split('/')[0].Trim(), purok = r.Purok })))</script>
+    <script id="certPrefillJson" type="application/json">@Html.Raw(Json.Serialize(new { open = Model.OpenIssueModal, resident = Model.PrefillResident, title = Model.PrefillTitle, purpose = Model.PrefillPurpose }))</script>
+    <script src="~/js/certificates.js" asp-append-version="true"></script>
+}

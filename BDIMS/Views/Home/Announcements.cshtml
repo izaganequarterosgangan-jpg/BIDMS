@@ -1,0 +1,706 @@
+﻿@model BDIMS.Models.AnnouncementsViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Announcements";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/Announcements.css" asp-append-version="true" />
+}
+
+<header class="top-header">
+    <div>
+        <h2 class="header-title">Announcements</h2>
+        <p class="header-subtitle">Post and monitor barangay announcements.</p>
+    </div>
+    <div class="header-actions">
+        <form method="get" asp-controller="Home" asp-action="Announcements" class="search-box">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="text" name="searchQuery" value="@Model.SearchQuery" placeholder="Search announcements..." onchange="this.form.submit()" />
+        </form>
+        <button type="button" class="action-button" data-bs-toggle="modal" data-bs-target="#announcementModalBootstrap">
+            <i data-lucide="plus" class="search-icon"></i> New Post
+        </button>
+    </div>
+</header>
+
+<div class="content-area">
+    <div class="hero-card">
+        <div>
+            <p class="eyebrow">PUBLIC NOTICE</p>
+            <h3 id="scheduledSummaryText">@Model.ScheduledCount announcement@(Model.ScheduledCount == 1 ? "" : "s") scheduled</h3>
+            <p>Keep residents informed about upcoming activities and advisories.</p>
+        </div>
+        <div class="pill-live">Live updates</div>
+    </div>
+
+    <div class="stats-row">
+        <div class="mini-card info">
+            <span class="mini-label">SCHEDULED</span>
+            <strong id="scheduledCount">@Model.ScheduledCount</strong>
+        </div>
+        <div class="mini-card warning">
+            <span class="mini-label">HIGH PRIORITY</span>
+            <strong id="highPriorityCount">@Model.HighPriorityCount</strong>
+        </div>
+        <div class="mini-card success">
+            <span class="mini-label">RESIDENTS REACH</span>
+            <strong id="residentsReach">@Model.ResidentsReach</strong>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-header">
+            <h4>Upcoming Posts</h4>
+            <a asp-controller="Home" asp-action="Announcements" class="secondary-btn">Manage</a>
+        </div>
+        <div class="table-responsive">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>ANNOUNCEMENT TITLE</th>
+                        <th>PURPOSE & DETAILS</th>
+                        <th>TARGET AUDIENCE</th>
+                        <th>DATE</th>
+                        <th>PRIORITY</th>
+                        <th>ACTION</th>
+                    </tr>
+                </thead>
+                <tbody id="announcementsTableBody">
+                    @if (Model.Announcements != null && Model.Announcements.Any())
+                    {
+                        @foreach (var post in Model.Announcements)
+                        {
+                            <tr>
+                                <td class="post-title">@post.Title</td>
+                                <td class="post-purpose">@post.Purpose</td>
+                                <td>
+                                    <span class="audience-badge">@post.TargetAudience</span>
+                                </td>
+                                <td class="post-date">@post.Date</td>
+                                <td>
+                                    <span class="priority-tag priority-@post.Priority.ToLower()">
+                                        @post.Priority
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="action-buttons d-flex align-items-center gap-2">
+                                        <!-- Plain button rather than a nested form, matching what
+                                             rowHtml() emits for live rows, so a row looks and
+                                             behaves the same however it was added. -->
+                                        <button type="button" class="edit-btn" data-edit-id="@post.Id">
+                                            <i data-lucide="pencil"></i>Edit
+                                        </button>
+                                        <form asp-controller="Home" asp-action="DeleteAnnouncement" asp-route-id="@post.Id" method="post" class="d-inline" data-delete-form>
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="delete-btn"><i data-lucide="trash-2"></i>Delete</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colSpan="6" class="empty-state">No records found. Click <strong>New Post</strong> to publish your first real announcement.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap Modal Container -->
+<div class="modal fade" id="announcementModalBootstrap" tabindex="-1" aria-labelledby="announceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="announceModalLabel">New Announcement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="announcementForm" asp-controller="Home" asp-action="CreateAnnouncement" method="post">
+            @Html.AntiForgeryToken()
+            <!-- The record id while editing, empty when creating a new post. The "name"
+                 must be Id (not editAnnouncementId): the form is posted as
+                 url-encoded form data, so ASP.NET binds it by name to the "int id"
+                 parameter of UpdateAnnouncement. A mismatched name silently bound 0
+                 and made the save fail with "Title and Purpose are required" even
+                 though both fields were filled in. -->
+            <input type="hidden" id="announcementId" name="Id" value="" />
+            <div class="mb-3">
+                <label class="form-label">Announcement Title *</label>
+                <input type="text" id="announcementTitle" name="title" class="form-control" placeholder="e.g. Barangay Vaccination Drive" required />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Purpose & Details *</label>
+                <textarea id="announcementPurpose" name="purpose" class="form-control" rows="3" placeholder="Describe the main goal, required documents, or instructions for residents..." required></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Target Audience</label>
+                <select id="announcementAudience" name="targetAudience" class="form-select">
+                    <option value="All Barangay Residents">All Barangay Residents</option>
+                    <option value="Senior Citizens & Caregivers">Senior Citizens & Caregivers</option>
+                    <option value="Youth & Students">Youth & Students</option>
+                    <option value="Household Heads">Household Heads</option>
+                    <option value="Business Owners">Business Owners</option>
+                </select>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Schedule Date *</label>
+                    <input type="text" id="announcementDate" name="date" class="form-control" placeholder="e.g. Aug 20, 2026" required />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Priority Level</label>
+                    <select id="announcementPriority" name="priority" class="form-select">
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary" id="announcementSubmitButton">Publish Announcement</button>
+            </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        // createIcons() replaces every <i data-lucide> with an inline <svg>, once.
+        // refreshIcons() re-runs it after site.js inserts a new row, otherwise the
+        // new row's delete button renders as a blank 16x16 box. It is also null-guarded
+        // so a blocked CDN leaves the rest of this page working.
+        refreshIcons();
+
+        // The Dashboard's "Post Announcement" quick action links here with
+        // ?openModal=true, but nothing consumed that parameter. See the same handler in
+        // Blotter.cshtml.
+        (function () {
+            var params = new URLSearchParams(window.location.search);
+            if (String(params.get('openModal')).toLowerCase() !== 'true') { return; }
+
+            var el = document.getElementById('announcementModalBootstrap');
+            if (!el || !window.bootstrap) { return; }
+
+            params.delete('openModal');
+            var query = params.toString();
+            window.history.replaceState({}, '', window.location.pathname + (query ? '?' + query : ''));
+
+            window.addEventListener('load', function () {
+                bootstrap.Modal.getOrCreateInstance(el).show();
+            });
+        })();
+
+        // Live summary + table sync --------------------------------------------
+        // Creating or deleting a post left the summary cards and the table showing
+        // the previous state until the page was reloaded. Both flows now go over
+        // AJAX and update in place, using the counts the controller recomputes from
+        // the database, so the cards always agree with a fresh page load.
+        (function () {
+            var form = document.getElementById('announcementForm');
+            var body = document.getElementById('announcementsTableBody');
+            if (!form || !body) { return; }
+
+            // site.js carries a second announcement submit handler. When both were bound
+            // to this form, one click produced two POSTs and two identical rows. This page
+            // claims the form first, so site.js sees the flag and stands down.
+            form.setAttribute('data-submit-bound', '1');
+
+            var modal = document.getElementById('announcementModalBootstrap');
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            var token = meta ? meta.getAttribute('content') : '';
+
+            function escapeHtml(value) {
+                return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                });
+            }
+
+            function notify(message, type) {
+                if (typeof showToast === 'function') { showToast(message, type); }
+            }
+
+            function applyCounts(counts) {
+                if (!counts) { return; }
+
+                if (typeof counts.scheduled === 'number') {
+                    var scheduled = document.getElementById('scheduledCount');
+                    if (scheduled) { scheduled.textContent = String(counts.scheduled); }
+
+                    var summary = document.getElementById('scheduledSummaryText');
+                    if (summary) {
+                        summary.textContent = counts.scheduled
+                            + ' announcement'
+                            + (counts.scheduled === 1 ? '' : 's')
+                            + ' scheduled';
+                    }
+                }
+
+                if (typeof counts.highPriority === 'number') {
+                    var high = document.getElementById('highPriorityCount');
+                    if (high) { high.textContent = String(counts.highPriority); }
+                }
+
+                if (counts.residentsReach) {
+                    var reach = document.getElementById('residentsReach');
+                    if (reach) { reach.textContent = counts.residentsReach; }
+                }
+            }
+
+            // Edit state ------------------------------------------------------------
+            // The create modal is reused for editing rather than adding a second,
+            // near-identical dialog. #announcementId is empty for a new post and
+            // holds the row's id while editing, which is what tells the submit handler
+            // below whether to insert a row or update the one already on screen.
+            var editIdField = document.getElementById('announcementId');
+            var modalTitle = document.getElementById('announceModalLabel');
+            var submitButton = document.getElementById('announcementSubmitButton');
+
+            var CREATE_ACTION = '/Home/CreateAnnouncement';
+            var UPDATE_ACTION = '/Home/UpdateAnnouncement';
+
+            // Remembered so the form can always be pointed back at create, whatever
+            // markup the tag helper originally emitted (it may include a path prefix).
+            var defaultAction = form.getAttribute('action') || CREATE_ACTION;
+
+            function isEditing() {
+                return !!(editIdField && editIdField.value);
+            }
+
+            // Returns the modal to "new post" mode. Called after a successful create,
+            // after a successful edit, and when the modal is dismissed, so reopening
+            // it always starts from a blank form rather than stale edit values.
+            function resetToCreateMode() {
+                if (editIdField) { editIdField.value = ''; }
+                form.setAttribute('action', defaultAction);
+
+                if (modalTitle) { modalTitle.textContent = 'New Announcement'; }
+                if (submitButton) { submitButton.textContent = 'Publish Announcement'; }
+            }
+
+            function enterEditMode(id) {
+                if (editIdField) { editIdField.value = String(id); }
+                form.setAttribute('action', UPDATE_ACTION);
+
+                if (modalTitle) { modalTitle.textContent = 'Edit Announcement'; }
+                if (submitButton) { submitButton.textContent = 'Save Changes'; }
+            }
+
+            // Reads one row back out of the table into the form. The values come from
+            // the cells rather than from a JS-side copy of the model, so what gets
+            // edited is always exactly what the user sees -- and rows added over AJAX
+            // behave exactly like server-rendered ones.
+            function fillFormFromRow(row) {
+                var cells = row ? row.querySelectorAll('td') : null;
+                if (!cells || cells.length < 5) { return false; }
+
+                // Resolved by id so the lookup cannot drift from the markup above. The name
+                // attributes are what the server binds; these ids are the stable
+                // hooks the script writes through.
+                var titleInput = document.getElementById('announcementTitle');
+                var purposeInput = document.getElementById('announcementPurpose');
+                var audienceSelect = document.getElementById('announcementAudience');
+                var dateInput = document.getElementById('announcementDate');
+                var prioritySelect = document.getElementById('announcementPriority');
+
+                if (titleInput) { titleInput.value = cells[0].textContent.trim(); }
+                if (purposeInput) { purposeInput.value = cells[1].textContent.trim(); }
+                if (dateInput) { dateInput.value = cells[3].textContent.trim(); }
+
+                // A select can only hold a value that exists as an option. Stored rows
+                // may carry an audience or priority added after this list was written,
+                // so an unknown value is appended rather than silently reverting the
+                // field to the first choice when the user saves.
+                if (audienceSelect) {
+                    setSelectValue(audienceSelect, cells[2].textContent.trim());
+                }
+
+                if (prioritySelect) {
+                    setSelectValue(prioritySelect, (cells[4].textContent || '').trim().toLowerCase());
+                }
+
+                return true;
+            }
+
+            // Selects an option by value, case-insensitively, appending the option
+            // first when the stored value is not among the existing choices.
+            function setSelectValue(select, value) {
+                if (!select || !value) { return; }
+
+                for (var i = 0; i < select.options.length; i++) {
+                    if (select.options[i].value.toLowerCase() === value.toLowerCase()) {
+                        select.selectedIndex = i;
+                        return;
+                    }
+                }
+
+                var option = document.createElement('option');
+                option.value = value;
+                option.textContent = value;
+                select.appendChild(option);
+                select.value = value;
+            }
+
+            function findRowFor(id) {
+                var button = body.querySelector('[data-edit-id="' + id + '"]');
+                return button && button.closest ? button.closest('tr') : null;
+            }
+
+            // Rewrites an existing row in place from the saved item, so an edit shows
+            // up immediately without a reload. The markup rebuilt here is the same
+            // shape rowHtml() produces, so an edited row is indistinguishable from a
+            // freshly inserted one and the column widths do not shift.
+            function updateRow(item) {
+                if (!item || item.id == null) { return; }
+
+                var row = findRowFor(String(item.id));
+                if (!row) { return; }
+
+                var holder = document.createElement('tbody');
+                holder.innerHTML = rowHtml(item);
+
+                var replacement = holder.firstChild;
+                if (!replacement) { return; }
+
+                // Move the existing delete <form> across so a server-rendered row keeps
+                // its antiforgery token and action after being rewritten. A live row
+                // has no form, so this is skipped and its plain button is used.
+                var oldForm = row.querySelector('form[data-delete-form]');
+                var newDelete = replacement.querySelector('[data-delete-id]');
+
+                if (oldForm && newDelete) {
+                    var wrapper = document.createElement('div');
+                    wrapper.className = 'd-inline';
+                    wrapper.appendChild(oldForm);
+                    newDelete.parentNode.replaceChild(wrapper, newDelete);
+                }
+
+                row.parentNode.replaceChild(replacement, row);
+
+                // The replacement carries raw <i data-lucide> placeholders again, so
+                // the icon pass has to run or both buttons render as blank boxes.
+                if (typeof refreshIcons === 'function') { refreshIcons(); }
+            }
+
+            // Walks up to the owning button by hand, walking through text and SVG
+            // nodes alike. closest() alone is not reliable here because the click
+            // usually lands on the <svg> the icon pass generated.
+            function resolveActionButton(node, attribute) {
+                while (node && node !== body) {
+                    if (node.getAttribute && node.getAttribute(attribute) !== null) {
+                        return node;
+                    }
+                    node = node.parentNode;
+                }
+                return null;
+            }
+
+            function onEditClick(event) {
+                var button = resolveActionButton(event.target, 'data-edit-id');
+
+                // The same handler also runs directly on rows as they are inserted;
+                // the flag makes it idempotent.
+                if (!button || event.__announcementEditHandled) { return; }
+
+                event.__announcementEditHandled = true;
+                event.preventDefault();
+
+                var row = button.closest ? button.closest('tr') : null;
+                if (!fillFormFromRow(row)) { return; }
+
+                enterEditMode(button.getAttribute('data-edit-id'));
+
+                if (modal && window.bootstrap) {
+                    var instance = bootstrap.Modal.getInstance(modal) ||
+                        bootstrap.Modal.getOrCreateInstance(modal);
+                    instance.show();
+                }
+            }
+
+            function post(url, data) {
+                return fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'RequestVerificationToken': token
+                    },
+                    body: data
+                }).then(function (r) {
+                    if (!r.ok) { throw new Error('request failed'); }
+                    return r.json();
+                });
+            }
+
+            // URLSearchParams does not reliably accept a FormData directly across engines, and a
+            // throw inside the submit handler was silently swallowed -- leaving the cards
+            // stale with no error anywhere. The pairs are copied out explicitly instead.
+            function encode(form) {
+                var data = new URLSearchParams();
+
+                new FormData(form).forEach(function (value, key) {
+                    data.append(key, value);
+                });
+
+                return data.toString();
+            }
+
+            // Mirrors exactly what the Razor loop renders, so a row added live is
+            // indistinguishable from one rendered on the server.
+            function rowHtml(item) {
+                // Defensive default: a response missing "item" used to throw on
+                // item.title, and that throw propagated into the catch below, which
+                // reported a failure for an announcement that was in fact saved.
+                var data = item || {};
+
+                return '<tr>' +
+                    '<td class="post-title">' + escapeHtml(data.title) + '</td>' +
+                    '<td class="post-purpose">' + escapeHtml(data.purpose) + '</td>' +
+                    '<td><span class="audience-badge">' + escapeHtml(data.targetAudience) + '</span></td>' +
+                    '<td class="post-date">' + escapeHtml(data.date) + '</td>' +
+                    '<td><span class="priority-tag priority-' + escapeHtml(String(data.priority || '').toLowerCase()) + '">' + escapeHtml(data.priority) + '</span></td>' +
+                    '<td><div class="action-buttons d-flex align-items-center gap-2">' +
+                        // A plain button rather than the nested <form> the server
+                        // renders: the HTML parser drops a form element from table
+                        // markup, which silently removed the delete control from a
+                        // row added this way. The Edit control is a plain button for
+                        // the same reason, and both classes/spacing match the Razor
+                        // markup exactly so the column lines up either way.
+                        '<button type="button" class="edit-btn" data-edit-id="' + escapeHtml(String(data.id == null ? '' : data.id)) + '"><i data-lucide="pencil"></i>Edit</button>' +
+                        '<button type="button" class="delete-btn" data-delete-id="' + escapeHtml(String(data.id == null ? '' : data.id)) + '"><i data-lucide="trash-2"></i>Delete</button>' +
+                    '</div></td>' +
+                '</tr>';
+            }
+
+            // Renders the new post into the "Upcoming Posts" table. Deliberately kept
+            // separate from, and wrapped so that a cosmetic problem with a single row
+            // can never be reported as a failed save: the announcement is already
+            // committed by the time this runs.
+            function appendRow(item) {
+                try {
+                    // The empty-state message lives in a <td> inside its own <tr>, so
+                    // the cell alone is removed and a blank row is left behind.
+                    var emptyCell = body.querySelector('.empty-state');
+                    var emptyRow = emptyCell ? (emptyCell.closest ? emptyCell.closest('tr') : emptyCell.parentNode) : null;
+                    if (emptyRow && emptyRow.parentNode) { emptyRow.parentNode.removeChild(emptyRow); }
+
+                    var holder = document.createElement('tbody');
+                    holder.innerHTML = rowHtml(item);
+
+                    var row = holder.firstChild;
+                    if (!row) { return; }
+
+                    body.insertBefore(row, body.firstChild);
+
+                    // Bound directly here as well as through the delegated listener,
+                    // so both controls work from the moment the row lands.
+                    var liveButton = row.querySelector('[data-delete-id]');
+                    if (liveButton) { liveButton.addEventListener('click', onDeleteClick); }
+
+                    var liveEdit = row.querySelector('[data-edit-id]');
+                    if (liveEdit) { liveEdit.addEventListener('click', onEditClick); }
+
+                    // The new row's delete icon is injected markup, so the icon pass
+                    // has to run again or it renders as a blank box.
+                    if (typeof refreshIcons === 'function') { refreshIcons(); }
+                } catch (err) {
+                    // Logged only. The cards above are already correct, and a reload
+                    // will render the row the server persisted.
+                    console.error('Unable to render the new announcement row:', err);
+                }
+            }
+
+        form.addEventListener('submit', function (event) {
+                // Stops the browser's own form POST, which would reload the page and
+                // discard the in-place table/count updates entirely.
+                event.preventDefault();
+
+                // One submission, one request. A second submit while the first is still
+                // in flight (double click, or a slow round trip) is ignored, so a post can
+                // never be created twice and leave the cards out of step with the table.
+                if (form.getAttribute('data-submitting') === '1') { return; }
+                form.setAttribute('data-submitting', '1');
+
+                // Captured before any branch below runs. The edit mode has to be decided
+                // from the form's state up front, because resetToCreateMode() clears it.
+                var editing = isEditing();
+
+                // Disabling the button closes the gap before the fetch resolves: the
+                // browser cannot fire another submit event from a control it has
+                // disabled. It is re-enabled on failure so the form stays usable.
+                var submitControl = form.querySelector('button[type="submit"]');
+                if (submitControl) { submitControl.disabled = true; }
+
+                var data = encode(form);
+
+                // Re-enables the form for the next announcement. Called on every exit
+                // path so a transient failure never leaves the modal stuck.
+                function releaseForm() {
+                    form.removeAttribute('data-submitting');
+                    if (submitControl) { submitControl.disabled = false; }
+                }
+
+                post(form.getAttribute('action') || CREATE_ACTION, data)
+                    .then(function (response) {
+                        // The server reports success explicitly, but a response that
+                        // carries the announcement's id is equally conclusive evidence
+                        // that the change was persisted.
+                        if (response && (response.success || response.id)) {
+                            // Counts come from the server, recomputed from the database,
+                            // so the cards always match a fresh page load and pick up an
+                            // edited priority or schedule date immediately.
+                            applyCounts(response.counts);
+
+                            if (editing) {
+                                // Rewrites the row already on screen in place.
+                                updateRow(response.item);
+                            } else {
+                                // Renders into the "Upcoming Posts" table right away, so
+                                // the new post shows without clicking "Manage".
+                                appendRow(response.item);
+                            }
+
+                            form.reset();
+
+                            // Back to "new post" so the next open of the modal starts
+                            // blank and posts to CreateAnnouncement.
+                            resetToCreateMode();
+
+                            if (modal && window.bootstrap) {
+                                // getInstance returns null until the modal has been
+                                // shown, so fall back to creating the instance first.
+                                var instance = bootstrap.Modal.getInstance(modal) ||
+                                    bootstrap.Modal.getOrCreateInstance(modal);
+                                instance.hide();
+                            }
+
+                            releaseForm();
+
+                            notify(editing
+                                ? 'Announcement updated successfully.'
+                                : 'Announcement created.', 'success');
+                        } else {
+                            // The server sends a message with the failure when it has
+                            // one (a missing row, or a blank required field).
+                            releaseForm();
+                            notify((response && response.message) || (editing
+                                ? 'Unable to update announcement.'
+                                : 'Unable to create announcement.'), 'danger');
+                        }
+                    })
+                    .catch(function (err) {
+                        // Reached only for a genuine transport/HTTP failure. Rendering
+                        // problems are contained inside appendRow/updateRow, so a row
+                        // that will not paint can no longer be misreported as a failure.
+                        console.error(err);
+                        releaseForm();
+                        notify(editing
+                            ? 'Unable to update announcement.'
+                            : 'Unable to create announcement.', 'danger');
+                    });
+            });
+
+            // Delegated, so rows inserted above are covered without re-binding.
+            body.addEventListener('submit', function (event) {
+                var deleteForm = event.target;
+
+                if (!deleteForm || !deleteForm.matches || !deleteForm.matches('form[data-delete-form]')) { return; }
+
+                event.preventDefault();
+
+                if (!window.confirm('Delete this announcement?')) { return; }
+
+                var data = encode(deleteForm);
+
+                post(deleteForm.getAttribute('action'), data)
+                    .then(function (result) {
+                        if (!result || !result.success) { throw new Error('delete failed'); }
+
+                        applyCounts(result.counts);
+
+                        var row = deleteForm.closest('tr');
+                        if (row && row.parentNode) { row.parentNode.removeChild(row); }
+
+                        notify('Announcement deleted.', 'success');
+                    })
+                    .catch(function (err) {
+                        console.error(err);
+                        notify('Unable to delete announcement.', 'danger');
+                    });
+            });
+
+            // Shares the single walk-up helper with the edit control. Both look for a
+            // different data attribute but resolve a button the same way, and having
+            // one implementation keeps the two action buttons behaving identically.
+            function resolveDeleteButton(node) {
+                return resolveActionButton(node, 'data-delete-id');
+            }
+
+            function onDeleteClick(event) {
+                var button = resolveDeleteButton(event.target);
+
+                // The same handler runs once directly on the row and once through the
+                // delegated listener; the flag makes it idempotent.
+                if (!button || event.__announcementDeleteHandled) { return; }
+
+                event.__announcementDeleteHandled = true;
+                event.preventDefault();
+
+                if (!window.confirm('Delete this announcement?')) { return; }
+
+                post('/Home/DeleteAnnouncement?id=' + encodeURIComponent(button.getAttribute('data-delete-id')), '')
+                    .then(function (result) {
+                        if (!result || !result.success) { throw new Error('delete failed'); }
+
+                        applyCounts(result.counts);
+
+                        var row = button.closest ? button.closest('tr') : null;
+                        if (row && row.parentNode) { row.parentNode.removeChild(row); }
+
+                        notify('Announcement deleted.', 'success');
+                    })
+                    .catch(function (err) {
+                        console.error(err);
+                        notify('Unable to delete announcement.', 'danger');
+                    });
+            }
+
+            // Delegated so any row is covered, and onDeleteClick is additionally bound
+            // directly to each row as it is inserted.
+            body.addEventListener('click', onDeleteClick);
+
+            // Same arrangement for Edit: delegated here so server-rendered rows and
+            // rows inserted over AJAX are both covered without re-binding, and bound
+            // directly in appendRow so a brand new row responds immediately.
+            body.addEventListener('click', onEditClick);
+
+            // Returning the modal to "new post" mode on close. Without this, opening
+            // the modal with "New Post" after an edit would show the edited row's
+            // values under an "Edit Announcement" heading and post them as a new
+            // announcement. hidden.bs.modal covers the close button, the backdrop and
+            // the Escape key alike.
+            if (modal) {
+                modal.addEventListener('hidden.bs.modal', function () {
+                    resetToCreateMode();
+                });
+            }
+        })();
+
+        // The real modal is #announcementModalBootstrap and is a Bootstrap .modal, not a
+        // .modal-overlay with an .active class. The two helpers that targeted a
+        // #announcementModal that does not exist were never called and would throw on
+        // null, so they were removed rather than left as a trap.
+    </script>
+}

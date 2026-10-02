@@ -1,0 +1,423 @@
+@model BDIMS.Models.CertificateTemplateEditorViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Certificate Template Editor";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/settings.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/certificatetemplate.css" asp-append-version="true" />
+}
+
+<div class="settings-page">
+    <div class="settings-body">
+
+        <div class="top-header">
+            <div class="header-title-group">
+                <h2 class="header-title">Certificate Template Manager</h2>
+                <p class="header-subtitle">Replace the printable layout for any certificate type. Saved layouts apply to every issue, preview and print immediately.</p>
+            </div>
+
+            <div class="header-actions">
+                <a asp-controller="Home" asp-action="Settings" asp-route-tab="documents" class="secondary-btn">
+                    <i class="bi bi-arrow-left me-1"></i> Back to Certificates &amp; Fees
+                </a>
+            </div>
+        </div>
+
+        @if (TempData["SuccessMessage"] != null)
+        {
+            <div class="toast-success">
+                <span>&#10003;</span>
+                @TempData["SuccessMessage"]
+            </div>
+        }
+        @if (TempData["TemplateError"] != null)
+        {
+            <div class="toast-error">
+                <span>!</span>
+                @TempData["TemplateError"]
+            </div>
+        }
+
+        <div class="tpl-layout">
+
+            <!-- ============ LEFT: PICKER, PALETTE, IMPORT, NEW TYPE ============ -->
+            <aside class="tpl-sidebar">
+
+                <div class="settings-card tpl-card">
+                    <div class="card-header">
+                        <h2>Template</h2>
+                        <p>Pick a certificate type to load or start its printable layout.</p>
+                    </div>
+
+                    <form method="get" asp-controller="Home" asp-action="CertificateTemplateEditor" class="tpl-picker">
+                        <label class="tpl-field">
+                            <span>Certificate Type</span>
+                            <select name="type" id="tplTypeSelect" class="tpl-select" onchange="this.form.submit()">
+                                @foreach (var type in Model.CertificateTypes)
+                                {
+                                    <option value="@type" selected="@(type.Equals(Model.Template.CertificateName, StringComparison.OrdinalIgnoreCase))">@type</option>
+                                }
+                            </select>
+                        </label>
+
+                        <button type="submit" class="btn-add-certificate tpl-load-btn">
+                            <i class="bi bi-arrow-right-circle me-1"></i> Load
+                        </button>
+                    </form>
+
+                    <ul class="tpl-template-list">
+                        @foreach (var template in Model.Templates)
+                        {
+                            <li class="tpl-template-item @(template.Id == Model.Template.Id ? "active" : "")">
+                                <a asp-controller="Home" asp-action="CertificateTemplateEditor" asp-route-id="@template.Id">
+                                    <span class="tpl-template-name">@template.CertificateName</span>
+                                    <span class="tpl-template-fee">&#8369;@template.Fee.ToString("N2")</span>
+                                </a>
+                                @if (Model.Templates.Count > 1)
+                                {
+                                    <form asp-action="DeleteCertificateTemplate" method="post" class="tpl-delete-form"
+                                          data-template-name="@template.CertificateName"
+                                          onsubmit="return confirmDeleteTemplate(this);">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@template.Id" />
+                                        <button type="submit" class="btn-remove-cert" title="Delete template">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                }
+                            </li>
+                        }
+                    </ul>
+
+                    @if (Model.Template.Id != 0)
+                    {
+                        <p class="tpl-meta">
+                            <i class="bi bi-clock-history me-1"></i>
+                            Last updated @Model.Template.UpdatedAt.ToString("MMM d, yyyy h:mm tt")
+                            <span class="tpl-meta-sep">&middot;</span>
+                            @Model.Template.Source
+                        </p>
+                    }
+                    else
+                    {
+                        <p class="tpl-meta tpl-meta-draft">
+                            <i class="bi bi-pencil-square me-1"></i>
+                            Unsaved draft &mdash; save to create this template.
+                        </p>
+                    }
+                </div>
+
+                <div class="settings-card tpl-card">
+                    <div class="card-header">
+                        <h2>Placeholders</h2>
+                        <p>Click a tag to insert it at the cursor.</p>
+                    </div>
+
+                    <div class="tpl-token-palette">
+                        @foreach (var token in Model.Tokens)
+                        {
+                            <button type="button"
+                                    class="tpl-token"
+                                    title="@token.Description — e.g. @token.Sample"
+                                    onclick="tplInsertToken('@token.Placeholder')">
+                                <code>@token.Placeholder</code>
+                                <span>@token.Description</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <div class="settings-card tpl-card">
+                    <div class="card-header">
+                        <h2>Import a Document</h2>
+                        <p>Replace this layout with an uploaded file.</p>
+                    </div>
+
+                    <form asp-action="ImportCertificateTemplate" method="post" enctype="multipart/form-data"
+                          class="tpl-import-form" onsubmit="return confirmImport();">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="templateId" value="@Model.Template.Id" />
+                        <input type="hidden" name="certificateName" value="@Model.Template.CertificateName" />
+
+                        <input type="file" name="file" id="tplImportFile" class="tpl-file-input" accept=".docx,.html,.htm" />
+                        <p class="tpl-import-hint">
+                            <strong>.docx</strong> and <strong>.html</strong> (max 8&nbsp;MB). Embedded images are
+                            inlined automatically. PDF is not supported &mdash; it is a fixed-layout format with
+                            no reusable template structure.
+                        </p>
+
+                        <button type="submit" class="btn-add-certificate tpl-import-btn" id="tplImportBtn" disabled>
+                            <i class="bi bi-upload me-1"></i> Import &amp; Replace Layout
+                        </button>
+                    </form>
+                </div>
+
+                <div class="settings-card tpl-card">
+                    <div class="card-header">
+                        <h2>Add Certificate Type</h2>
+                        <p>Creates a fee row and a starter template together.</p>
+                    </div>
+
+                    <form asp-action="CreateCertificateType" method="post" class="tpl-import-form"
+                          onsubmit="return confirmNewType();">
+                        @Html.AntiForgeryToken()
+
+                        <label class="tpl-field">
+                            <span>Certificate Name</span>
+                            <input type="text" name="certificateName" class="tpl-input" placeholder="e.g. Barangay Clearance" required />
+                        </label>
+
+                        <div class="tpl-inline-fields">
+                            <label class="tpl-field">
+                                <span>Fee (&#8369;)</span>
+                                <input type="number" name="fee" class="tpl-input" value="0" min="0" step="0.01" />
+                            </label>
+
+                            <label class="tpl-check">
+                                <input type="checkbox" name="requiresResidency" value="true" />
+                                <span>Requires Residency</span>
+                            </label>
+                        </div>
+
+                        <button type="submit" class="btn-add-certificate tpl-import-btn">
+                            <i class="bi bi-plus-lg me-1"></i> Add Certificate Type
+                        </button>
+                    </form>
+                </div>
+            </aside>
+
+            <!-- ============ RIGHT: EDITOR + PREVIEW ============ -->
+            <section class="tpl-main">
+
+                <form id="tplForm" asp-controller="Home" asp-action="SaveCertificateTemplate" method="post">
+                    @Html.AntiForgeryToken()
+
+                    <input type="hidden" name="Template.Id" id="tplId" value="@Model.Template.Id" />
+                    <input type="hidden" name="Template.CertificateName" id="tplType" value="@Model.Template.CertificateName" />
+                    <input type="hidden" name="Template.Fee" id="tplFee" value="@Model.Template.Fee.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+                    <input type="hidden" name="Template.TemplateHtml" id="tplHtmlInput" value="" />
+
+                    <div class="settings-card tpl-card">
+                        <div class="card-header card-header-with-action">
+                            <div>
+                                <h2>Layout &amp; Letterhead</h2>
+                                <p>Edit visually, or switch to HTML source to hand-tune the markup. Seals, borders and the signature block are preserved on every print.</p>
+                            </div>
+                            <div class="tpl-header-actions">
+                                <button type="button" class="secondary-btn" onclick="tplRestoreDefault()">
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i> Restore Default
+                                </button>
+                                <button type="button" class="secondary-btn" onclick="tplOpenPreviewModal()">
+                                    <i class="bi bi-eye me-1"></i> Preview Document
+                                </button>
+                                <button type="submit" class="btn-add-certificate">
+                                    <i class="bi bi-floppy me-1"></i> Save &amp; Update Template
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="tpl-editor-shell">
+                            <div class="tpl-editor-bar">
+                                <div class="tpl-mode-switch" role="group" aria-label="Editor mode">
+                                    <button type="button" class="tpl-mode-btn active" data-mode="visual" onclick="tplSetMode('visual')">
+                                        <i class="bi bi-type-bold me-1"></i> Visual
+                                    </button>
+                                    <button type="button" class="tpl-mode-btn" data-mode="source" onclick="tplSetMode('source')">
+                                        <i class="bi bi-code-slash me-1"></i> HTML Source
+                                    </button>
+                                </div>
+
+                                <span class="tpl-token-summary tpl-token-summary-empty" id="tplTokenSummary">No placeholders used yet</span>
+                            </div>
+
+                            <!-- Rich text toolbar -->
+                            <div class="tpl-ribbon" id="tplRibbon">
+                                <div class="tpl-ribbon-group">
+                                    <button type="button" class="tpl-rbtn" data-cmd="bold" title="Bold (Ctrl+B)"><i class="bi bi-type-bold"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="italic" title="Italic (Ctrl+I)"><i class="bi bi-type-italic"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="underline" title="Underline (Ctrl+U)"><i class="bi bi-type-underline"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="strikeThrough" title="Strikethrough"><i class="bi bi-type-strikethrough"></i></button>
+                                </div>
+
+                                <div class="tpl-ribbon-group">
+                                    <button type="button" class="tpl-rbtn" data-block="h2" title="Heading 2">H2</button>
+                                    <button type="button" class="tpl-rbtn" data-block="h3" title="Heading 3">H3</button>
+                                    <button type="button" class="tpl-rbtn" data-block="p" title="Paragraph">&para;</button>
+                                    <button type="button" class="tpl-rbtn" data-block="blockquote" title="Indented block">&nbsp;&nbsp;&nbsp;&nbsp;</button>
+                                </div>
+
+                                <div class="tpl-ribbon-group">
+                                    <button type="button" class="tpl-rbtn" data-cmd="justifyLeft" title="Align left"><i class="bi bi-text-left"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="justifyCenter" title="Align centre"><i class="bi bi-text-center"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="justifyRight" title="Align right"><i class="bi bi-text-right"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="justifyFull" title="Justify"><i class="bi bi-text-paragraph"></i></button>
+                                </div>
+
+                                <div class="tpl-ribbon-group">
+                                    <label class="tpl-ribbon-field">
+                                        <span>Line</span>
+                                        <select id="tplLineHeight" class="tpl-rselect" title="Line spacing">
+                                            <option value="">Spacing</option>
+                                            <option value="1">1.0</option>
+                                            <option value="1.15">1.15</option>
+                                            <option value="1.5">1.5</option>
+                                            <option value="2">2.0</option>
+                                        </select>
+                                    </label>
+
+                                    <label class="tpl-ribbon-field">
+                                        <span>Size</span>
+                                        <select id="tplFontSize" class="tpl-rselect" title="Font size">
+                                            <option value="">Font</option>
+                                            <option value="10pt">10pt</option>
+                                            <option value="12pt">12pt</option>
+                                            <option value="14pt">14pt</option>
+                                            <option value="16pt">16pt</option>
+                                            <option value="18pt">18pt</option>
+                                            <option value="24pt">24pt</option>
+                                        </select>
+                                    </label>
+                                </div>
+
+                                <div class="tpl-ribbon-group">
+                                    <button type="button" class="tpl-rbtn" data-spacing="space-up" title="Increase space below paragraph"><i class="bi bi-chevron-double-up"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-spacing="space-down" title="Decrease space below paragraph"><i class="bi bi-chevron-double-down"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-spacing="indent-in" title="Increase indent (margin-left)"><i class="bi bi-text-indent-left"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-spacing="indent-out" title="Decrease indent (margin-left)"><i class="bi bi-text-indent-right"></i></button>
+                                </div>
+
+                                <div class="tpl-ribbon-group">
+                                    <button type="button" class="tpl-rbtn" data-cmd="insertUnorderedList" title="Bulleted list"><i class="bi bi-list-ul"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="insertOrderedList" title="Numbered list"><i class="bi bi-list-ol"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="outdent" title="Decrease indent"><i class="bi bi-indent-decrease"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="indent" title="Increase indent"><i class="bi bi-indent-increase"></i></button>
+                                </div>
+
+                                <div class="tpl-ribbon-group">
+                                    <button type="button" class="tpl-rbtn" data-image="brgy" title="Insert Barangay seal">
+                                        <i class="bi bi-image me-1"></i>Brgy Seal
+                                    </button>
+                                    <button type="button" class="tpl-rbtn" data-image="ubay" title="Insert Municipality seal">
+                                        <i class="bi bi-image me-1"></i>Ubay Seal
+                                    </button>
+                                    <button type="button" class="tpl-rbtn" data-image="url" title="Insert image from URL">
+                                        <i class="bi bi-link-45deg"></i>
+                                    </button>
+                                </div>
+
+                                <div class="tpl-ribbon-group">
+                                    <button type="button" class="tpl-rbtn" data-cmd="removeFormat" title="Clear formatting">
+                                        <i class="bi bi-eraser me-1"></i> Clear
+                                    </button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="undo" title="Undo (Ctrl+Z)"><i class="bi bi-arrow-counterclockwise"></i></button>
+                                    <button type="button" class="tpl-rbtn" data-cmd="redo" title="Redo (Ctrl+Y)"><i class="bi bi-arrow-clockwise"></i></button>
+                                </div>
+                            </div>
+
+                            <!-- Visual surface -->
+                            <div id="tplVisual" class="tpl-visual-editor" contenteditable="true" spellcheck="false"
+                                 role="textbox" aria-multiline="true" aria-label="Certificate template"></div>
+
+                            <!-- Source surface -->
+                            <textarea id="tplSource" class="tpl-code-editor" spellcheck="false"
+                                      aria-label="Certificate template HTML source"
+                                      style="display:none"></textarea>
+                        </div>
+
+                        <p class="tpl-editor-note">
+                            <i class="bi bi-image me-1"></i>
+                            Seals resolve from <code>/images/logos/</code>. Drop
+                            <code>brgy_governor_boyles_seal.png</code> and
+                            <code>ubay_municipality_seal.png</code> there to replace the shipped placeholders.
+                        </p>
+                    </div>
+                </form>
+
+                <div class="settings-card tpl-card">
+                    <div class="card-header card-header-with-action">
+                        <div>
+                            <h2>Live Preview</h2>
+                            <p>Rendered with the sample record below, exactly as it will print.</p>
+                        </div>
+                        <div class="tpl-preview-actions">
+                            <label class="tpl-field tpl-field-inline">
+                                <span>Sample Resident</span>
+                                <select id="tplPreviewResident" class="tpl-select tpl-select-sm">
+                                    @foreach (var resident in Model.Residents)
+                                    {
+                                        <option value="@resident.Id" selected="@(resident.Id == Model.PreviewResidentId)">
+                                            @resident.Name — @resident.Purok
+                                        </option>
+                                    }
+                                </select>
+                            </label>
+
+                            <label class="tpl-field tpl-field-inline">
+                                <span>Purpose</span>
+                                <input type="text" id="tplPreviewPurpose" class="tpl-input tpl-input-sm"
+                                       value="@Model.PreviewPurpose" />
+                            </label>
+
+                            <label class="tpl-field tpl-field-inline">
+                                <span>Issue Date</span>
+                                <input type="date" id="tplPreviewDate" class="tpl-input tpl-input-sm"
+                                       value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="tplTokenWarning" class="tpl-token-warning" style="display:none">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <span id="tplTokenWarningText"></span>
+                    </div>
+
+                    <div class="tpl-preview-stage">
+                        @* The paper is laid out at its real 210mm width and only scaled down
+                           to fit this panel, so the preview wraps exactly where the editor
+                           canvas and the printed sheet wrap. The wrapper carries the scaled
+                           box so the stage does not scroll or leave a gap. *@
+                        <div class="tpl-preview-scaler" id="tplPreviewScaler">
+                            <div class="tpl-preview-paper" id="tplPreviewPaper">
+                                @Html.Raw(Model.PreviewHtml)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<!-- ============ PREVIEW DOCUMENT MODAL ============ -->
+<div id="tplPreviewModal" class="modal fade" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Preview Document</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body tpl-modal-body">
+                <div class="tpl-modal-paper" id="tplModalPaper"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="secondary-btn" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="primary-modal-btn" onclick="tplPrintModalPreview()">
+                    <i class="bi bi-printer me-1"></i> Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Default layouts travel with the page as hidden textareas so "Restore Default" works
+   without another round trip. Textarea .value decodes them back to raw HTML. *@
+<textarea id="tplInitialHtml" hidden>@Model.Template.TemplateHtml</textarea>
+<textarea id="tplDefaultHtml" hidden>@Model.DefaultHtml</textarea>
+<textarea id="tplDefaultSkeleton" hidden>@BDIMS.Services.CertificateTemplateDefaults.BuildFallbackFor(Model.Template.CertificateName)</textarea>
+
+@section Scripts {
+    <script src="~/js/certificate-print.js" asp-append-version="true"></script>
+    <script src="~/js/certificate-template-editor.js" asp-append-version="true"></script>
+}

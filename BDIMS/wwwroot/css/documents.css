@@ -1,0 +1,663 @@
+﻿/* Page Layout */
+.page-shell {
+    display: flex;
+    min-height: 100vh;
+    background: #f4f7fc;
+    color: #1e293b;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.sidebar {
+    width: 260px;
+    background: #0b194c;
+    color: #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 20px 0;
+    flex-shrink: 0;
+}
+
+/* Sidebar logo and branding now consolidated into site.css */
+
+.nav-menu {
+    padding: 0 12px;
+}
+
+.menu-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #64748b;
+    margin: 8px 10px 10px;
+}
+
+.nav-list { /* centralized in site.css */ }
+
+.nav-button {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border: none;
+    border-left: 3px solid transparent;
+    background: transparent;
+    color: #cbd5e1;
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: left;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+    .nav-button:hover,
+    .nav-button.active {
+        background: rgba(255, 255, 255, 0.05);
+        color: #fbbf24;
+        border-left-color: #fbbf24;
+    }
+
+/* Active menu styling: gold/yellow icon and text, clean left indicator */
+.nav-button.active {
+    background: transparent;
+    color: #f59e0b !important;
+    border-left-color: transparent;
+}
+
+.nav-button.active .nav-icon,
+.nav-button.active i {
+    color: #f59e0b;
+}
+
+.nav-button-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sidebar-user {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.avatar-gold {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #fbbf24;
+    color: #78350f;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.user-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    margin: 0;
+}
+
+.user-role {
+    font-size: 12px;
+    color: #94a3b8;
+    margin: 0;
+}
+
+.logout-button {
+    background: transparent;
+    border: none;
+    color: #cbd5e1;
+    cursor: pointer;
+}
+
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 28px;
+}
+
+.top-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.header-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+}
+
+.header-subtitle {
+    color: #64748b;
+    font-size: 13px;
+    margin-top: 4px;
+    margin-bottom: 0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.search-box {
+    display: flex;
+    align-items: center;
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 8px 12px;
+    gap: 8px;
+}
+
+    .search-box input {
+        border: none;
+        outline: none;
+        background: transparent;
+        font-size: 14px;
+    }
+
+.action-button, .secondary-btn { /* now centralized in site.css */ }
+
+.content-area {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.hero-card {
+    background: white;
+    padding: 20px;
+    border-radius: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+}
+
+.eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+}
+
+.hero-card h3 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.hero-card p {
+    color: #64748b;
+    font-size: 14px;
+    margin: 0;
+}
+
+.pill {
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.mini-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+    .mini-card.warning {
+        background: #fff7ed;
+        border-color: #fdba74;
+    }
+
+    .mini-card.info {
+        background: #eff6ff;
+        border-color: #93c5fd;
+    }
+
+    .mini-card.success {
+        background: #ecfdf5;
+        border-color: #86efac;
+    }
+
+.mini-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 0.08em;
+}
+
+.mini-card strong {
+    font-size: 24px;
+    color: #0f172a;
+}
+
+.table-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+}
+
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.custom-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+    .custom-table th,
+    .custom-table td {
+        text-align: left;
+        padding: 14px 12px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 14px;
+    }
+
+    .custom-table th {
+        color: #64748b;
+        font-weight: 700;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+.status-pill {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-processing {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.status-complete {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.action-cell {
+    display: flex;
+    gap: 8px;
+}
+
+.icon-btn {
+    border: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+}
+
+    .icon-btn.edit {
+        background: #f1f5f9;
+        color: #475569;
+    }
+
+        .icon-btn.edit:hover {
+            background: #e2e8f0;
+        }
+
+    .icon-btn.preview {
+        background: #e0f2fe;
+        color: #0284c7;
+    }
+
+        .icon-btn.preview:hover {
+            background: #bae6fd;
+        }
+
+/* Certificate Preview Box */
+.certificate-preview-box {
+    border: 2px dashed #cbd5e1;
+    padding: 24px;
+    border-radius: 12px;
+    background: #fafafa;
+    text-align: center;
+}
+
+.cert-header h3 {
+    font-size: 14px;
+    letter-spacing: 1px;
+    color: #475569;
+    margin: 0;
+}
+
+.cert-header p {
+    font-size: 12px;
+    color: #64748b;
+    margin: 4px 0 0;
+}
+
+.cert-header h4 {
+    font-size: 16px;
+    margin-top: 6px;
+    color: #0b194c;
+}
+
+.cert-divider {
+    margin: 16px 0;
+    border: 0;
+    border-top: 1px solid #cbd5e1;
+}
+
+.cert-body {
+    margin: 20px 0;
+    line-height: 1.6;
+}
+
+    .cert-body h5 {
+        font-size: 16px;
+        text-decoration: underline;
+        margin-bottom: 12px;
+    }
+
+.cert-footer {
+    margin-top: 30px;
+    text-align: right;
+}
+
+    .cert-footer span {
+        font-size: 12px;
+        color: #64748b;
+        display: block;
+    }
+
+.primary-modal-btn {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background-color: #0b194c;
+    color: white;
+    cursor: pointer;
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+/* Print Styles */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    .printable-area, .printable-area * {
+        visibility: visible;
+    }
+
+    .printable-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        border: none;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+}
+
+/* ============================================================
+   DOCUMENT REQUEST PIPELINE
+   ============================================================ */
+
+.stats-row.cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 992px) {
+    .stats-row.cols-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.mini-card.danger {
+    background: #fef2f2;
+    border-color: #fca5a5;
+}
+
+.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-inreview {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.status-processing {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.status-approved {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.status-rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.cell-truncate {
+    display: inline-block;
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+}
+
+.icon-btn.approve {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.icon-btn.approve:hover {
+    background: #bbf7d0;
+}
+
+/* Destructive action in the Documents request rows. Same geometry as the other row
+   icons; only the colours are new, so no existing button changes appearance. */
+.icon-btn.danger {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+    .icon-btn.danger:hover {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+/* Request details modal */
+.req-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.detail-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+}
+
+.purpose-text {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.attachment-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.attachment-image {
+    max-width: 100%;
+    max-height: 320px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.download-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #0284c7;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.download-link:hover {
+    text-decoration: underline;
+}
+/* ============================================================
+   FIXED SIDEBAR LAYOUT
+   On wide screens the dark sidebar is pinned to the left edge and the content
+   column beside it does the vertical scrolling, so the navigation (including the
+   profile card at its foot) stays put no matter how long the page runs.
+
+   Only positioning is touched: the 260px width, the navy background, the menu
+   icons and the profile card are all left exactly as they were. The child
+   combinators give these rules enough weight to beat the page stylesheets that
+   also declare .sidebar / .main-content, and the breakpoint matches the one the
+   existing responsive rules use, so the stacked mobile layout (sidebar above
+   content) keeps working untouched.
+   ============================================================ */
+
+@media (min-width: 769px) {
+    .page-shell {
+        padding-left: 260px;
+        /* The page must not scroll sideways: a full-bleed row inside the content
+           column would otherwise add a horizontal scrollbar. `clip` is used rather
+           than `hidden` on purpose -- `overflow-x: hidden` makes the browser compute
+           `overflow-y` as `auto`, which turns this box into a second scroll
+           container and is what caused the scroll position to snap back. `clip`
+           removes the overflow without creating a scroller. */
+        overflow-x: clip;
+    }
+
+    .page-shell > .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 260px;
+        overflow-y: auto;
+        z-index: 1030;
+    }
+
+    .page-shell > .main-content {
+        height: 100vh;
+        overflow-y: auto;
+    }
+}
+
+/* ---- Footer in the content column --------------------------------------
+   The element is `class="app-footer"`, deliberately namespaced. It used to carry a
+   bare `footer` class, which collided with the demo `.footer` rule Bootstrap
+   compiles into BDIMS.styles.css
+   (position:absolute; bottom:0; width:100%; white-space:nowrap; line-height:60px).
+   That collision took the footer out of the flow, so it floated over the last rows
+   of a table, and `width:100%` on an absolutely positioned box resolved against the
+   viewport rather than the column -- which also made it overflow the page sideways.
+
+   Renaming the class removes the collision outright, so the overrides Bootstrap
+   needed are gone. What remains is simply the layout the footer is meant to have:
+   in normal flow, compact, and dropped to the bottom of the column when there is
+   spare room. `!important` is still required on padding / margin because the py-3,
+   px-4 and mt-4 utilities on the element are themselves !important. */
+.page-shell > .main-content > .app-footer {
+    position: static;
+    flex: 0 0 auto;
+    margin-top: auto !important;
+    padding: 8px 24px !important;
+}
+
+/* Keeps the last row of a table clear of the bottom of the viewport. */
+.page-shell > .main-content {
+    padding-bottom: 32px;
+}
+
+/* Printing must keep the geometry it had before the sidebar was pinned, so the
+   printable area still starts at the left edge of the sheet. */
+@media print {
+    .page-shell {
+        padding-left: 0;
+    }
+
+    .page-shell > .sidebar {
+        position: static;
+    }
+
+    .page-shell > .main-content {
+        height: auto;
+        overflow: visible;
+    }
+}

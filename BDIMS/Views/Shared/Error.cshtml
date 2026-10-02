@@ -1,0 +1,29 @@
+﻿@model ErrorViewModel
+@{
+    // _ViewStart sets Layout = null, so this inherited the bare-fragment rendering and
+    // every unhandled exception in production showed an unstyled page. This is the
+    // target of app.UseExceptionHandler("/Home/Error").
+    Layout = "_Layout";
+    ViewData["Title"] = "Error";
+}
+
+<div class="page-content">
+    <div class="card border-0 shadow-sm p-4">
+        <h1 class="h4 text-danger">Something went wrong</h1>
+        <p class="text-muted">
+            An unexpected error occurred while processing your request. The incident has been
+            recorded. Please try again, and contact the system administrator if it continues.
+        </p>
+
+        @if (Model.ShowRequestId)
+        {
+            <p>
+                <strong>Request ID:</strong> <code>@Model.RequestId</code>
+            </p>
+            <p class="text-muted small">
+                Quote this Request ID when reporting the problem so the administrator can find
+                the matching log entry.
+            </p>
+        }
+    </div>
+</div>

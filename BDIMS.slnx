@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="BDIMS.Tests/BDIMS.Tests.csproj" />
+  <Project Path="BDIMS/BDIMS.csproj" />
+</Solution>
