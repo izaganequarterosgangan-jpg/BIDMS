@@ -61,17 +61,19 @@
     gap: 10px;
 }
 
+/* Sidebar footer profile badge. Keep in sync with .header-avatar in _Layout.cshtml
+   and with the .avatar-gold rule in site.css. */
 .avatar-gold {
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    background: #fbbf24;
-    color: #78350f;
+    background: var(--color-avatar-bg, #0F172A);
+    color: var(--color-avatar-text, #FFFFFF);
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: 12px;
 }
 
 .user-name {

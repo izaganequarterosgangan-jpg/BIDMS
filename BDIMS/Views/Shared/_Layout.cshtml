@@ -34,6 +34,11 @@
                 --color-text-muted: #64748b;
                 --color-text-light: #94a3b8;
                 --color-primary: #2563eb;
+                /* Shared profile-badge palette. The sidebar footer badge (.avatar-gold)
+                   and the top header badge (.header-avatar) must stay identical, so
+                   both read these tokens instead of hard-coding their own colours. */
+                --color-avatar-bg: #0F172A;
+                --color-avatar-text: #FFFFFF;
                 --color-accent-amber: #f59e0b;
                 --color-accent-amber-light: #fffbe2;
                 --color-accent-blue-light: #eff6ff;
@@ -182,12 +187,14 @@
             .notif-item.read .notif-view-btn { color:#94a3b8; }
             .notif-empty { padding: 16px; color: var(--color-text-muted); }
 
+            /* Top header profile badge. Mirrors .avatar-gold in site.css so the same
+               user initials look identical in the sidebar footer and in the navbar. */
             .header-avatar {
                 width: 36px;
                 height: 36px;
                 border-radius: 50%;
-                background-color: var(--color-text-main);
-                color: var(--color-card-bg);
+                background-color: var(--color-avatar-bg, #0F172A);
+                color: var(--color-avatar-text, #FFFFFF);
                 display: flex;
                 align-items: center;
                 justify-content: center;

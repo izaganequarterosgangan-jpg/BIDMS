@@ -104,17 +104,20 @@
     border-radius: 50%;
 }
 
+/* Settings header profile badge. Same shared palette, size and weight as the
+   sidebar footer badge (.avatar-gold, site.css) and the top header badge
+   (.header-avatar, _Layout.cshtml). */
 .avatar-circle {
-    width: 34px;
-    height: 34px;
-    background-color: #0b1736;
-    color: white;
+    width: 36px;
+    height: 36px;
+    background-color: var(--color-avatar-bg, #0F172A);
+    color: var(--color-avatar-text, #FFFFFF);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 /* TABS */
