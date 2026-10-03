@@ -1,10 +1,10 @@
-#  Barangay Information and Document Management System (BIDMS)
+# 🏛️ Barangay Information and Document Management System (BIDMS)
 
 BIDMS is an ASP.NET Core MVC application designed to manage barangay records, handle resident information, issue official certificates, and log blotter incidents.
 
 ---
 
-##  System Architecture & Data Flow
+## 📊 System Architecture & Data Flow
 
 ```mermaid
 flowchart TD
@@ -22,8 +22,7 @@ flowchart TD
 
     G -->|Render View| J[Razor Views / Bootstrap UI]
     F -->|Render View| J
-    H -->|Render View| J
-sequenceDiagram
+    H -->|Render View| JsequenceDiagram
     autonumber
     actor User as Resident / Admin
     participant Auth as Auth Controller
