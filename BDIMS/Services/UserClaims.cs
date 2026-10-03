@@ -38,5 +38,29 @@ namespace BDIMS.Services
 
             return UserAccount.DeriveInitials(GetDisplayName(principal));
         }
+
+        /// <summary>
+        /// Contact email of the signed-in user. Falls back to the standard
+        /// <see cref="ClaimTypes.Email"/> claim.
+        /// </summary>
+        public static string? GetEmail(ClaimsPrincipal? principal) =>
+            principal?.FindFirst(UserAccount.EmailClaim)?.Value
+            ?? principal?.FindFirst(ClaimTypes.Email)?.Value;
+
+        /// <summary>Given name, or an empty string when the claim is absent.</summary>
+        public static string GetFirstName(ClaimsPrincipal? principal) =>
+            principal?.FindFirst(UserAccount.FirstNameClaim)?.Value ?? string.Empty;
+
+        /// <summary>Family name, or an empty string when the claim is absent.</summary>
+        public static string GetLastName(ClaimsPrincipal? principal) =>
+            principal?.FindFirst(UserAccount.LastNameClaim)?.Value ?? string.Empty;
+
+        /// <summary>Office identifier, or an empty string when the claim is absent.</summary>
+        public static string GetEmployeeId(ClaimsPrincipal? principal) =>
+            principal?.FindFirst(UserAccount.EmployeeIdClaim)?.Value ?? string.Empty;
+
+        /// <summary>Mobile number, or an empty string when the claim is absent.</summary>
+        public static string GetContactNumber(ClaimsPrincipal? principal) =>
+            principal?.FindFirst(UserAccount.ContactNumberClaim)?.Value ?? string.Empty;
     }
 }

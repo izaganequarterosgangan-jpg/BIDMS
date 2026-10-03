@@ -49,6 +49,36 @@ namespace BDIMS.Models
         [MaxLength(256)]
         public string DisplayName { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Given name, editable from the My Profile page (e.g. "Isagane").
+        ///
+        /// Kept separate from <see cref="LastName"/> rather than split out of
+        /// <see cref="DisplayName"/> on read, because "Quarteros Isagane" and
+        /// "Isagane Quarteros" are indistinguishable once concatenated - the badge
+        /// initials differ ("QI" vs "IQ"), so the order has to be stored.
+        /// </summary>
+        [MaxLength(128)]
+        public string FirstName { get; set; } = string.Empty;
+
+        /// <summary>Family name, editable from the My Profile page (e.g. "Quarteros").</summary>
+        [MaxLength(128)]
+        public string LastName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Office identifier issued by the barangay (e.g. "EMP-0015"). Presentation
+        /// only, so it is not unique-enforced; it is shown on the profile card.
+        /// </summary>
+        [MaxLength(64)]
+        public string EmployeeId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Mobile number the office can reach the staff member on (e.g. "09171234567").
+        /// Stored as free text rather than a numeric type because Philippine mobile
+        /// numbers are commonly written with a leading "+63" or a "0" prefix.
+        /// </summary>
+        [MaxLength(32)]
+        public string ContactNumber { get; set; } = string.Empty;
+
         /// <summary>Job title shown under the display name (e.g. "Barangay Secretary").</summary>
         [Required]
         [MaxLength(128)]
@@ -116,5 +146,98 @@ namespace BDIMS.Models
 
             return new string(letters);
         }
+
+        /// <summary>
+        /// Badge text for this account: the first letter of <see cref="FirstName"/> plus
+        /// the first letter of <see cref="LastName"/>.
+        ///
+        /// The structured names win when both are present, because they carry the true
+        /// order ("Quarteros Isagane" -> "QI", "Isagane Quarteros" -> "IQ") whereas a
+        /// display name that has been typed in freehand does not. Accounts created
+        /// before the My Profile page existed have both columns blank, so the display
+        /// name is used as the fallback and those badges keep rendering as they always
+        /// have rather than collapsing to "?".
+        /// </summary>
+        public string ResolveInitials()
+        {
+            var initials = ComposeInitials(FirstName, LastName);
+
+            return initials ?? DeriveInitials(DisplayName);
+        }
+
+        /// <summary>
+        /// Badge text for a first/last name pair, or <c>null</c> when the pair does not
+        /// carry both halves.
+        ///
+        /// Centralised so the profile save, the seeder and the layout all agree on how
+        /// "IQ" is produced; a badge that disagreed between screens would look like the
+        /// identity had failed to refresh.
+        /// </summary>
+        public static string? ComposeInitials(string? firstName, string? lastName)
+        {
+            var first = firstName?.Trim() ?? string.Empty;
+            var last = lastName?.Trim() ?? string.Empty;
+
+            if (first.Length == 0 || last.Length == 0)
+            {
+                return null;
+            }
+
+            return string.Concat(
+                char.ToUpperInvariant(first[0]),
+                char.ToUpperInvariant(last[0]));
+        }
+
+        /// <summary>
+        /// Joins the structured names into the <see cref="DisplayName"/> the layout and
+        /// the header badge render, trimming the separator when only one half is filled
+        /// in. Returns <paramref name="fallback"/> when neither name is present.
+        /// </summary>
+        public static string ComposeDisplayName(
+            string? firstName,
+            string? lastName,
+            string? fallback = null)
+        {
+            var joined = string.Join(
+                " ",
+                new[] { firstName?.Trim(), lastName?.Trim() }
+                    .Where(part => !string.IsNullOrWhiteSpace(part)));
+
+            return joined.Length > 0
+                ? joined
+                : (fallback ?? string.Empty).Trim();
+        }
+
+        /// <summary>
+        /// Best-effort split of a free-text display name into a given/family pair.
+        ///
+        /// Only used to pre-fill the My Profile form for accounts that predate the
+        /// split-name columns. "Isagane Quarteros" becomes ("Isagane", "Quarteros");
+        /// anything longer keeps the first word as the given name and treats the
+        /// remainder as the family name, so a middle name is not silently dropped.
+        /// </summary>
+        public static (string First, string Last) SplitDisplayName(string? displayName)
+        {
+            var words = (displayName ?? string.Empty)
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            if (words.Length == 0)
+            {
+                return (string.Empty, string.Empty);
+            }
+
+            if (words.Length == 1)
+            {
+                return (words[0], string.Empty);
+            }
+
+            return (words[0], string.Join(" ", words.Skip(1)));
+        }
+
+        public const string EmailClaim = "bdims:email";
+        public const string FirstNameClaim = "bdims:first_name";
+        public const string LastNameClaim = "bdims:last_name";
+        public const string EmployeeIdClaim = "bdims:employee_id";
+        public const string ContactNumberClaim = "bdims:contact_number";
     }
 }

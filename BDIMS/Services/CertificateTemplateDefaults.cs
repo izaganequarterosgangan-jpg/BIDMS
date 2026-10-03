@@ -39,7 +39,7 @@ namespace BDIMS.Services
                 <p style="margin-bottom: 20px;"><strong>TO WHOM IT MAY CONCERN:</strong></p>
 
                 <p style="text-indent: 50px; margin-bottom: 15px;">
-                  This is to certify that <strong>{{ ResidentName }}</strong>, <strong>{{ ResidentAge }}</strong>, a resident of <strong>{{ Purok }}, {{ BarangayName }}, {{ Municipality }}, {{ Province }}</strong> is a bonafide member and resident of this barangay.
+                  This is to certify that <b><u>{{ ResidentName }}</u></b>, <b>{{ ResidentAge }}</b> years old, a resident of {{ Purok }}, Governor Boyles, Ubay, Bohol is a bonafide member and resident of this barangay.
                 </p>
 
                 <p style="text-indent: 50px; margin-bottom: 15px;">
@@ -47,11 +47,11 @@ namespace BDIMS.Services
                 </p>
 
                 <p style="text-indent: 50px; margin-bottom: 30px;">
-                  This <strong>CERTIFICATION</strong> is being issued upon the request of the above-mentioned name in connection to his/her <strong>{{ Purpose }}</strong> and for whatever legal purposes it may serve.
+                  This CERTIFICATION is being issued upon the request of the above name mentioned in connection to his/her <b><u>{{ Purpose }}</u></b> and for whatever purposes it may serve.
                 </p>
 
                 <p style="text-indent: 50px; margin-bottom: 50px;">
-                  Given this <strong>{{ IssueDate }}</strong>, at Barangay {{ BarangayName }}, {{ Municipality }}, {{ Province }}, Philippines.
+                  Given this <b><u>{{ DayOrdinal }}</u></b> day of <b><u>{{ MonthYear }}</u></b>, at Barangay Governor Boyles, Ubay, Bohol, Philippines.
                 </p>
               </div>
 
@@ -112,15 +112,15 @@ namespace BDIMS.Services
                     <p style="margin-bottom: 20px;"><strong>TO WHOM IT MAY CONCERN:</strong></p>
 
                     <p style="text-indent: 50px; margin-bottom: 15px;">
-                      This is to certify that <strong>{{ ResidentName }}</strong>, <strong>{{ ResidentAge }}</strong>, a resident of <strong>{{ Purok }}, {{ BarangayName }}, {{ Municipality }}, {{ Province }}</strong>, {{{{WebUtilityText(bodyText)}}}}}
+                      This is to certify that <b><u>{{ ResidentName }}</u></b>, <b>{{ ResidentAge }}</b> years old, a resident of {{ Purok }}, Governor Boyles, Ubay, Bohol, {{{{WebUtilityText(bodyText)}}}}}
                     </p>
 
                     <p style="text-indent: 50px; margin-bottom: 30px;">
-                      This <strong>{{{{heading}}}}</strong> is being issued upon the request of the above-mentioned name in connection to his/her <strong>{{ Purpose }}</strong> and for whatever legal purposes it may serve.
+                      This <strong>{{{{heading}}}}</strong> is being issued upon the request of the above name mentioned in connection to his/her <b><u>{{ Purpose }}</u></b> and for whatever purposes it may serve.
                     </p>
 
                     <p style="text-indent: 50px; margin-bottom: 50px;">
-                      Given this <strong>{{ IssueDate }}</strong>, at Barangay {{ BarangayName }}, {{ Municipality }}, {{ Province }}, Philippines.
+                      Given this <b><u>{{ DayOrdinal }}</u></b> day of <b><u>{{ MonthYear }}</u></b>, at Barangay Governor Boyles, Ubay, Bohol, Philippines.
                     </p>
                   </div>
 

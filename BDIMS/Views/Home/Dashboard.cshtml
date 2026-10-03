@@ -3,13 +3,29 @@
 @{
     Layout = "_Layout";
     ViewData["Title"] = "Dashboard";
+
+    // Hero copy is time-aware. Computed once here so the markup below stays
+    // text-only; DashboardGreeting holds the (unit-tested) rules.
+    var now = DateTime.Now;
+    var hour = now.Hour;
+    var heroGreeting = BDIMS.Services.DashboardGreeting.Compose(
+        hour, BDIMS.Services.UserClaims.GetFirstName(User));
+    var heroSubtitle = BDIMS.Services.DashboardGreeting.ComposeSubtitle(
+        Model.PendingRequestsCount, hour);
+
+    // Blank config values are skipped by ComposeLocation, so an unconfigured
+    // barangay renders "Ubay, Bohol" rather than "Barangay , , Bohol".
+    var locationLine = BDIMS.Services.DashboardGreeting.ComposeLocation(
+        BarangayCfg.Value.BarangayName,
+        BarangayCfg.Value.Municipality,
+        BarangayCfg.Value.Province);
 }
 
 <!-- Top Navigation Header -->
 <header class="top-header">
     <div>
         <h1 class="header-title">Dashboard</h1>
-        <p class="header-subtitle">@DateTime.Now.ToString("dddd, MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture) · Barangay @BarangayCfg.Value.BarangayName, @BarangayCfg.Value.Municipality, @BarangayCfg.Value.Province</p>
+        <p class="header-subtitle">@now.ToString("dddd, MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture) · @locationLine</p>
     </div>
     <div class="header-actions">
         <div class="search-box-header">
@@ -29,21 +45,25 @@
             </button>
             <div id="notifDropdown" class="notif-dropdown" aria-hidden="true"></div>
         </div>
-        <div class="header-avatar" title="@BDIMS.Services.UserClaims.GetDisplayName(User)">
-            @BDIMS.Services.UserClaims.GetInitials(User)
-        </div>
+        @* Both profile badges (this header avatar and the sidebar footer block) link to
+           My Profile. The badge keeps its own class and dimensions; only the anchor is
+           added, so the header height, its gap and the flex row are untouched. *@
+        <a asp-controller="Account" asp-action="Profile" class="profile-badge-link" title="My Profile">
+            <div class="header-avatar" title="@BDIMS.Services.UserClaims.GetDisplayName(User)">
+                @BDIMS.Services.UserClaims.GetInitials(User)
+            </div>
+        </a>
     </div>
 </header>
 
 <!-- Hero / Action Banner -->
 <section class="hero-card">
     <div>
-        <span class="hero-eyebrow">GOOD MORNING</span>
-        <h3>@Model.PendingRequestsCount document request@(Model.PendingRequestsCount != 1 ? "s" : "") need@(Model.PendingRequestsCount != 1 ? "" : "s") your attention today.</h3>
+        <span class="hero-eyebrow">@heroGreeting</span>
+        <h3>@heroSubtitle</h3>
     </div>
     <div class="hero-actions">
         <a asp-controller="Home" asp-action="Documents" asp-route-newRequest="true" class="primary-btn">+ New Request</a>
-        <a asp-controller="Home" asp-action="Documents" asp-route-searchQuery="Pending" class="secondary-btn">View Pending</a>
     </div>
 </section>
 

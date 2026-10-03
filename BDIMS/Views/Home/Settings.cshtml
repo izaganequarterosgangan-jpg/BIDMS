@@ -45,7 +45,11 @@
                 </div>
 
                 <!-- User Profile Initials Avatar -->
-                <div class="avatar-circle">@BDIMS.Services.UserClaims.GetInitials(User)</div>
+                @* Same top-right profile badge as the Dashboard header. Only the anchor is
+                   added, so the badge, its size and the header row's gap are untouched.*@
+                <a asp-controller="Account" asp-action="Profile" class="profile-badge-link" title="My Profile">
+                    <div class="avatar-circle">@BDIMS.Services.UserClaims.GetInitials(User)</div>
+                </a>
             </div>
         </div>
 

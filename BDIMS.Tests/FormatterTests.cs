@@ -41,6 +41,37 @@ public class CertificateTemplateFormatterTests
     }
 
     [Fact]
+    public void MonthYear_UsesUppercaseMonthAndFullYear()
+    {
+        // The "Given this <b><u>3rd</u></b> day of <b><u>OCTOBER, 2026</u></b>"
+        // fragment depends on this being the month and year only - no day, no ordinal.
+        Assert.Equal(
+            "OCTOBER, 2026",
+            CertificateTemplateFormatter.MonthYear(new DateTime(2026, 10, 3)));
+        Assert.Equal(
+            "JANUARY, 2027",
+            CertificateTemplateFormatter.MonthYear(new DateTime(2027, 1, 1)));
+    }
+
+    [Fact]
+    public void IssueDate_StaysIdenticalToOrdinalDayOfMonthYear()
+    {
+        // IssueDate keeps its legacy whole-phrase wording for saved templates, and
+        // must stay exactly the concatenation the new tokens produce.
+        var date = new DateTime(2026, 10, 3);
+
+        Assert.Equal(
+            "3rd day of OCTOBER, 2026",
+            CertificateTemplateFormatter.IssueDate(date));
+
+        Assert.Equal(
+            CertificateTemplateFormatter.Ordinal(date.Day)
+                + " day of "
+                + CertificateTemplateFormatter.MonthYear(date),
+            CertificateTemplateFormatter.IssueDate(date));
+    }
+
+    [Fact]
     public void Age_UsesSingularOnlyForOne()
     {
         Assert.Equal("1 year old", CertificateTemplateFormatter.Age(1));

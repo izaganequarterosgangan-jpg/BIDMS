@@ -303,7 +303,15 @@ namespace BDIMS.Services
                     (d.ResidentName ?? "").Trim(),
                     "[ Resident Name ]"),
 
+                // Bare number only. The shipped markup supplies the literal words, as
+                // "<b>{{ResidentAge}}</b> years old", so the age is emphasised while
+                // "years old" stays plain. Templates saved before this split need the
+                // whole phrase: they use {{ResidentAgeFull}} below.
                 ["ResidentAge"] = d => Or(
+                    d.ResidentAge?.ToString(CultureInfo.InvariantCulture),
+                    "[ Age ]"),
+
+                ["ResidentAgeFull"] = d => Or(
                     CertificateTemplateFormatter.Age(d.ResidentAge),
                     "[ Age ]"),
 
@@ -318,6 +326,14 @@ namespace BDIMS.Services
                 ["IssueDate"] = d => CertificateTemplateFormatter.IssueDate(d.IssueDate),
 
                 ["IssueDateShort"] = d => CertificateTemplateFormatter.IssueDateShort(d.IssueDate),
+
+                // Date split into the two independently emphasised parts of
+                // "Given this <b><u>{{DayOrdinal}}</u></b> day of
+                // <b><u>{{MonthYear}}</u></b>". The literal "day of" between them
+                // stays plain.
+                ["DayOrdinal"] = d => CertificateTemplateFormatter.Ordinal(d.IssueDate.Day),
+
+                ["MonthYear"] = d => CertificateTemplateFormatter.MonthYear(d.IssueDate),
 
                 ["BarangayCaptain"] = d => Or(
                     CertificateTemplateFormatter.ResidentName(d.BarangayCaptain),
@@ -364,12 +380,15 @@ namespace BDIMS.Services
             {
                 new CertificateTemplateToken { Name = "ResidentName",        Description = "Resident full name, uppercased",            Sample = "MR. DEN MARK B. ETORMA" },
                 new CertificateTemplateToken { Name = "ResidentNameRaw",     Description = "Resident full name as recorded",           Sample = "Den Mark B. Etorma" },
-                new CertificateTemplateToken { Name = "ResidentAge",         Description = "Resident age in words",                     Sample = "17 years old" },
+                new CertificateTemplateToken { Name = "ResidentAge",         Description = "Resident age (number only)",                Sample = "17" },
+                new CertificateTemplateToken { Name = "ResidentAgeFull",     Description = "Resident age with the words \"years old\"",   Sample = "17 years old" },
                 new CertificateTemplateToken { Name = "Purok",               Description = "Resident purok of residence",               Sample = "Purok 2" },
                 new CertificateTemplateToken { Name = "Address",             Description = "Resident street address",                   Sample = "Purok 2, Governor Boyles, Ubay, Bohol" },
                 new CertificateTemplateToken { Name = "Purpose",             Description = "Stated purpose of the request",             Sample = "ENROLLMENT IN TAGBILARAN CITY COLLEGE (TCC)" },
                 new CertificateTemplateToken { Name = "IssueDate",           Description = "Date issued, formal wording",               Sample = "23rd day of JULY, 2024" },
                 new CertificateTemplateToken { Name = "IssueDateShort",      Description = "Date issued, short wording",                Sample = "23 July 2024" },
+                new CertificateTemplateToken { Name = "DayOrdinal",          Description = "Issue day with its ordinal suffix",        Sample = "23rd" },
+                new CertificateTemplateToken { Name = "MonthYear",           Description = "Issue month and year, uppercased",         Sample = "JULY, 2024" },
                 new CertificateTemplateToken { Name = "BarangayCaptain",     Description = "Punong Barangay name, uppercased",          Sample = "HON. CELES P. PONDAVILLA" },
                 new CertificateTemplateToken { Name = "BarangayCaptainRaw",  Description = "Punong Barangay name as recorded",          Sample = "Celes P. Pondavilla" },
                 new CertificateTemplateToken { Name = "SignatoryRole",       Description = "Signatory title under the signature line",  Sample = "Punong Barangay" },
@@ -408,7 +427,12 @@ namespace BDIMS.Services
             {
                 var value = Resolve(match.Groups[1].Value, context);
 
-                return value == null ? match.Value : Encode(value);
+                if (value == null)
+                {
+                    return match.Value;
+                }
+
+                return ApplyRequiredFormatting(match.Groups[1].Value, Encode(value), match, templateHtml!);
             });
 
             result = LegacyTokenPattern.Replace(result, match =>
@@ -419,6 +443,86 @@ namespace BDIMS.Services
             });
 
             return result;
+        }
+
+        /// <summary>
+        /// Inline emphasis a token must carry on the printed sheet. Plain tokens are
+        /// left exactly as the author typed them, which is what keeps a sentence
+        /// readable: "a resident of Purok 2" must not come out underlined.
+        /// </summary>
+        private enum TokenEmphasis
+        {
+            None,
+
+            /// <summary>Bold only - {{ResidentAge}}, where "years old" stays plain.</summary>
+            Bold,
+
+            /// <summary>Bold and underlined - {{ResidentName}}, {{Purpose}}, {{DayOrdinal}}, {{MonthYear}}.</summary>
+            BoldUnderline
+        }
+
+        private static readonly Dictionary<string, TokenEmphasis> RequiredEmphasis =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ResidentName"] = TokenEmphasis.BoldUnderline,
+                ["ResidentNameRaw"] = TokenEmphasis.BoldUnderline,
+                ["ResidentAge"] = TokenEmphasis.Bold,
+                ["Purpose"] = TokenEmphasis.BoldUnderline,
+                ["DayOrdinal"] = TokenEmphasis.BoldUnderline,
+                ["MonthYear"] = TokenEmphasis.BoldUnderline
+            };
+
+        // An opening emphasis tag immediately before the token: "<b><u>", "<u><b>",
+        // "<strong><u>" and so on. Only the run of tags directly touching the token
+        // counts, so an unrelated bold paragraph earlier in the template does not
+        // suppress the wrapping that is still required here.
+        private static readonly Regex EmphasisOpenPattern = new(
+            @"<(?:b|strong|u)\b[^>]*>\s*(?:<(?:b|strong|u)\b[^>]*>\s*)*$",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        // The matching close, e.g. "</u></b>".
+        private static readonly Regex EmphasisClosePattern = new(
+            @"^\s*(?:</(?:b|strong|u)>\s*)*(?:</(?:b|strong|u)>)",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static string ApplyRequiredFormatting(
+            string tokenName, string rendered, Match match, string source)
+        {
+            if (!RequiredEmphasis.TryGetValue(tokenName, out var emphasis)
+                || emphasis == TokenEmphasis.None)
+            {
+                return rendered;
+            }
+
+            // The shipped default markup already carries the tags, e.g.
+            // "<b><u>{{ResidentName}}</u></b>". Wrapping again would emit
+            // "<b><u><b><u>...</u></b></u></b>" - redundant nesting that bloats the
+            // printed markup and makes the certificate harder to audit. So the tag is
+            // only added when the author left the token bare, which is what lets an
+            // old imported template acquire the required emphasis without an edit.
+            if (IsAlreadyEmphasised(match, source))
+            {
+                return rendered;
+            }
+
+            return emphasis == TokenEmphasis.Bold
+                ? "<b>" + rendered + "</b>"
+                : "<b><u>" + rendered + "</u></b>";
+        }
+
+        private static bool IsAlreadyEmphasised(Match match, string source)
+        {
+            // The window is deliberately short: it only has to cover the two opening
+            // and closing tags of one inline run.
+            const int Window = 64;
+
+            var start = Math.Max(0, match.Index - Window);
+            var before = source[start..match.Index];
+
+            var end = Math.Min(source.Length, match.Index + match.Length + Window);
+            var after = source.Substring(match.Index + match.Length, end - (match.Index + match.Length));
+
+            return EmphasisOpenPattern.IsMatch(before) && EmphasisClosePattern.IsMatch(after);
         }
 
         public static IEnumerable<string> ExtractTokens(string? templateHtml)
@@ -498,7 +602,10 @@ namespace BDIMS.Services
         }
 
         public static string IssueDate(DateTime date) =>
-            Ordinal(date.Day) + " day of " + MonthName(date) + ", " + date.Year.ToString(CultureInfo.InvariantCulture);
+            Ordinal(date.Day) + " day of " + MonthYear(date);
+
+        public static string MonthYear(DateTime date) =>
+            MonthName(date) + ", " + date.Year.ToString(CultureInfo.InvariantCulture);
 
         public static string IssueDateShort(DateTime date) =>
             date.Day.ToString(CultureInfo.InvariantCulture) + " " + MonthName(date) + " " + date.Year.ToString(CultureInfo.InvariantCulture);

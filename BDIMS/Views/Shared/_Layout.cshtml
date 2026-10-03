@@ -594,13 +594,17 @@
             </div>
 
                 <div class="sidebar-user">
-                <div class="user-profile">
-                    <div class="avatar-gold">@currentUserInitials</div>
-                    <div>
-                        <p class="user-name">@currentUserName</p>
-                        <p class="user-role">@currentUserRole</p>
+                @* Anchoring the block keeps .user-profile's own flex layout, gap and the
+                   sidebar's fixed width intact - the anchor only supplies the hit area. *@
+                <a asp-controller="Account" asp-action="Profile" class="profile-badge-link sidebar-profile-link" title="My Profile">
+                    <div class="user-profile">
+                        <div class="avatar-gold">@currentUserInitials</div>
+                        <div>
+                            <p class="user-name">@currentUserName</p>
+                            <p class="user-role">@currentUserRole</p>
+                        </div>
                     </div>
-                </div>
+                </a>
                 <form asp-controller="Home" asp-action="Logout" method="post" class="m-0">
                     @Html.AntiForgeryToken()
                     <button type="submit" class="logout-button" title="Log Out">

@@ -1,0 +1,315 @@
+/* My Profile page styles.
+
+   Loaded only by Views/Account/Profile.cshtml. Every selector is scoped under
+   .profile-page or uses a .profile-* prefix, so this file cannot restyle the
+   top navbar, the header search box, the sidebar width or any grid used by the
+   Dashboard, Residents or Settings pages.
+
+   Colours, radii and the navy avatar palette all come from the variables the
+   layout already defines (see the --color-* / --radius-* block in
+   _Layout.cshtml), so the page tracks the system theme rather than hard-coding
+   its own palette. */
+
+.profile-page {
+    /* Navy for the primary action. Declared here rather than in _Layout
+       because no shared component uses it yet, so it never enters the
+       global cascade that the navbar, sidebar and other pages depend on. */
+    --profile-navy: #1b2a4e;
+
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+/* --- Page header ------------------------------------------------------- */
+
+.profile-header {
+    margin-bottom: 20px;
+}
+
+.profile-title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text-main, #0f172a);
+}
+
+.profile-subtitle {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: var(--color-text-muted, #64748b);
+}
+
+/* --- Alerts ------------------------------------------------------------ */
+
+.profile-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--radius-md, 8px);
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+.profile-alert-success {
+    background-color: #d1fae5;
+    color: var(--color-status-ready-text, #059669);
+    border: 1px solid #a7f3d0;
+}
+
+.profile-alert-error {
+    background-color: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+/* --- Single unified container ------------------------------------------
+   The avatar block, the two field groups and the action row all live inside
+   ONE white card. Previously each group floated as its own bordered card with
+   a gap in between, which read as three separate blocks. Sections are now
+   separated by an internal hairline instead, so the panel looks continuous. */
+
+.profile-card {
+    background-color: var(--color-card-bg, #ffffff);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: var(--radius-lg, 12px);
+    padding: 28px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+/* An internal block of the unified card: no card chrome of its own, just a
+   hairline above it. padding-top (not margin) keeps the gap from collapsing
+   through the section boundary. */
+.profile-section {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--color-border, #e2e8f0);
+}
+
+.profile-card-title {
+    margin: 0 0 4px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted, #64748b);
+}
+
+/* Renamed from .profile-card-hint. settings.css defines a rule by that exact
+   name and is loaded app-wide, so reusing it would make this page's styling
+   depend on which stylesheet a given view happens to pull in. */
+.profile-note {
+    margin: 0 0 16px;
+    font-size: 12px;
+    color: var(--color-text-light, #94a3b8);
+}
+
+/* --- Avatar card -------------------------------------------------------
+   The badge reuses the shared --color-avatar-* variables, so it matches the
+   sidebar footer badge and the header badge exactly. */
+
+.profile-identity {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--color-avatar-bg, #0F172A);
+    color: var(--color-avatar-text, #FFFFFF);
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-identity-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.profile-identity-name {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-text-main, #0f172a);
+}
+
+.profile-identity-role {
+    margin: 2px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-primary, #2563eb);
+}
+
+.profile-identity-email {
+    margin: 2px 0 0;
+    font-size: 13px;
+    color: var(--color-text-muted, #64748b);
+    overflow-wrap: anywhere;
+}
+
+.profile-photo-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-body, #334155);
+    background-color: var(--color-border-subtle, #f1f5f9);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: var(--radius-sm, 6px);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+/* --- Field grids --------------------------------------------------------
+   minmax(0, 1fr) rather than a bare 1fr: without the 0 minimum a long value
+   can refuse to shrink its track and push the column wider than the card. */
+
+.profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 24px;
+    margin-top: 16px;
+}
+
+/* Password row: three side-by-side columns, as specified. */
+.profile-grid-password {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+    margin-top: 16px;
+}
+
+/* Three password columns get cramped sooner than two, so this one steps down
+   to two earlier; everything collapses to a single column below 768px. */
+@media (max-width: 1024px) {
+    .profile-grid-password {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Single column on narrow screens so inputs never overflow their card. */
+@media (max-width: 768px) {
+    .profile-grid,
+    .profile-grid-password {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .profile-identity {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .profile-photo-btn {
+        align-self: center;
+    }
+}
+
+.profile-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.profile-label {
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted, #64748b);
+}
+
+/* Rounded inputs matching the rest of the system. */
+.profile-input {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 14px;
+    color: var(--color-text-main, #0f172a);
+    background-color: var(--color-bg-main, #f8fafc);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: var(--radius-md, 8px);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.profile-input:focus {
+    outline: none;
+    background-color: var(--color-card-bg, #ffffff);
+    border-color: var(--color-primary, #2563eb);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.profile-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.profile-error {
+    margin-top: 5px;
+    font-size: 12px;
+    color: #dc2626;
+}
+
+/* Client-side validation messages emitted by the jQuery unobtrusive scripts.
+   Hidden by default so they only occupy space once there is something to say. */
+.profile-field .field-validation-error {
+    display: inline;
+}
+
+.field-validation-valid,
+.input-validation-valid {
+    display: none;
+}
+
+/* --- Actions -----------------------------------------------------------
+   The row sits inside the unified card and shares its internal hairline, so
+   the buttons close the panel rather than floating beneath it. */
+
+.profile-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--color-border, #e2e8f0);
+}
+
+.profile-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0.6rem 1.5rem;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.15s ease;
+}
+
+.profile-btn:hover {
+    opacity: 0.9;
+}
+
+/* Dark navy primary action, as specified. */
+.profile-btn-primary {
+    background-color: var(--profile-navy, #1b2a4e);
+    color: #ffffff;
+    border: 1px solid var(--profile-navy, #1b2a4e);
+}
+
+/* Light gray outlined secondary action. */
+.profile-btn-outline {
+    background-color: transparent;
+    color: #475569;
+    border: 1px solid var(--color-border, #e2e8f0);
+}

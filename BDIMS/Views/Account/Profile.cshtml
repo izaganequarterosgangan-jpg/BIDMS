@@ -1,0 +1,162 @@
+@model BDIMS.Models.ProfileViewModel
+
+@{
+    ViewData["Title"] = "My Profile";
+    Layout = "_Layout";
+}
+
+@section Styles {
+    @* Scoped to this page only. Every rule is namespaced under .profile-page and
+       nothing here redefines a layout-level selector, so the navbar, the header
+       search box and the sidebar are untouched. *@
+    <link rel="stylesheet" href="~/css/profile.css" asp-append-version="true" />
+}
+
+<div class="profile-page">
+
+    <!-- Page header -->
+    <div class="profile-header">
+        <div class="profile-header-text">
+            <h2 class="profile-title">My Profile</h2>
+            <p class="profile-subtitle">Update your personal information and password</p>
+        </div>
+    </div>
+
+    @* Saved and failed both land back here via TempData, so the operator gets a
+       single, consistent confirmation channel. *@
+    @if (TempData["ProfileSuccess"] is string successMessage)
+    {
+        <div class="profile-alert profile-alert-success" role="status">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@successMessage</span>
+        </div>
+    }
+
+    <form asp-controller="Account" asp-action="SaveProfile" method="post" class="profile-form" novalidate>
+        @Html.AntiForgeryToken()
+
+        @* Summary of validation failures. The per-field messages still render below,
+           so this only has to point at the problem. *@
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="profile-alert profile-alert-error" role="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <span>Some details need attention before your profile can be saved.</span>
+            </div>
+        }
+
+        @* One continuous card. The three groups below are internal sections of
+           this single container, separated by a hairline, rather than separate
+           floating cards with gaps between them. *@
+        <div class="profile-card">
+
+            <!-- Profile avatar -->
+            <div class="profile-identity">
+            <div class="profile-avatar" aria-hidden="true">@Model.Initials</div>
+
+            <div class="profile-identity-text">
+                <p class="profile-identity-name">@Model.DisplayName</p>
+                <p class="profile-identity-role">@Model.Role</p>
+                <p class="profile-identity-email">@Model.Email</p>
+            </div>
+
+            @* No upload endpoint exists, so the control is inert and says so rather
+               than silently doing nothing when clicked. *@
+            <button type="button" class="profile-photo-btn" disabled
+                    title="Photo upload is not available yet">
+                <i class="bi bi-camera"></i> Change Photo
+            </button>
+            </div>
+
+            <!-- Information fields -->
+            <div class="profile-section">
+            <h3 class="profile-card-title">PERSONAL INFORMATION</h3>
+
+            <div class="profile-grid">
+                <div class="profile-field">
+                    <label asp-for="FirstName" class="profile-label"></label>
+                    <input asp-for="FirstName" class="profile-input" autocomplete="given-name" />
+                    <span asp-validation-for="FirstName" class="profile-error"></span>
+                </div>
+
+                <div class="profile-field">
+                    <label asp-for="LastName" class="profile-label"></label>
+                    <input asp-for="LastName" class="profile-input" autocomplete="family-name" />
+                    <span asp-validation-for="LastName" class="profile-error"></span>
+                </div>
+
+                <div class="profile-field">
+                    <label asp-for="EmployeeId" class="profile-label"></label>
+                    <input asp-for="EmployeeId" class="profile-input" autocomplete="off" />
+                    <span asp-validation-for="EmployeeId" class="profile-error"></span>
+                </div>
+
+                <div class="profile-field">
+                    <label asp-for="ContactNumber" class="profile-label"></label>
+                    <input asp-for="ContactNumber" class="profile-input" autocomplete="tel" />
+                    <span asp-validation-for="ContactNumber" class="profile-error"></span>
+                </div>
+
+                <div class="profile-field">
+                    <label asp-for="Email" class="profile-label"></label>
+                    @* type="email" gives native validation, but novalidate on the form
+                       keeps the server messages as the single source of truth and stops
+                       the browser from blocking submit before the user sees them. *@
+                    <input asp-for="Email" class="profile-input" type="email" autocomplete="email" />
+                    <span asp-validation-for="Email" class="profile-error"></span>
+                </div>
+
+                <div class="profile-field">
+                    <label asp-for="Role" class="profile-label"></label>
+                    <input asp-for="Role" class="profile-input" autocomplete="organization-title" />
+                    <span asp-validation-for="Role" class="profile-error"></span>
+                </div>
+            </div>
+            </div>
+
+            <!-- Change password: three fields side by side in a single row -->
+            <div class="profile-section">
+            <h3 class="profile-card-title">CHANGE PASSWORD</h3>
+            <p class="profile-note">
+                Leave these blank to keep your current password.
+            </p>
+
+            <div class="profile-grid-password">
+                <div class="profile-field">
+                    <label asp-for="CurrentPassword" class="profile-label"></label>
+                    <input asp-for="CurrentPassword" class="profile-input"
+                           type="password" autocomplete="current-password" />
+                    <span asp-validation-for="CurrentPassword" class="profile-error"></span>
+                </div>
+
+                <div class="profile-field">
+                    <label asp-for="NewPassword" class="profile-label"></label>
+                    <input asp-for="NewPassword" class="profile-input"
+                           type="password" autocomplete="new-password" />
+                    <span asp-validation-for="NewPassword" class="profile-error"></span>
+                </div>
+
+                <div class="profile-field">
+                    <label asp-for="ConfirmPassword" class="profile-label"></label>
+                    <input asp-for="ConfirmPassword" class="profile-input"
+                           type="password" autocomplete="new-password" />
+                    <span asp-validation-for="ConfirmPassword" class="profile-error"></span>
+                </div>
+            </div>
+            </div>
+
+        <!-- Actions -->
+        <div class="profile-actions">
+            <button type="submit" class="profile-btn profile-btn-primary">
+                <i class="bi bi-check-lg"></i> Save Changes
+            </button>
+
+            @* Outlined, as specified. Reloads the saved record rather than posting, so
+               Discard can never overwrite the database. *@
+            <a asp-controller="Account" asp-action="Profile" class="profile-btn profile-btn-outline">
+                Discard
+            </a>
+        </div>
+        </div>
+    </form>
+</div>
