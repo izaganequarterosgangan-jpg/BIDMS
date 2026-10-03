@@ -22,19 +22,4 @@ flowchart TD
 
     G -->|Render View| J[Razor Views / Bootstrap UI]
     F -->|Render View| J
-    H -->|Render View| JsequenceDiagram
-    autonumber
-    actor User as Resident / Admin
-    participant Auth as Auth Controller
-    participant Doc as Document Controller
-    participant DB as MySQL Database
-
-    User->>Auth: Login(Username, Password)
-    Auth->>DB: Validate Credentials
-    DB-->>Auth: Identity Validated
-    Auth-->>User: Redirect to Dashboard
-
-    User->>Doc: Request Certificate (e.g., Barangay Clearance)
-    Doc->>DB: Fetch Resident Info
-    DB-->>Doc: Return Resident Data
-    Doc-->>User: Generate & Render Printable Document
+    H -->|Render View| J
