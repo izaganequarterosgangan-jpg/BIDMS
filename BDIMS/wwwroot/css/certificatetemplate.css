@@ -488,19 +488,59 @@
         border-collapse: collapse;
     }
 
-/* Placeholder chips are atomic so rich-text commands cannot split them mid-token. */
+/* Placeholder chips are atomic so rich-text commands cannot split them mid-token.
+   Scoped strictly to the visual editor canvas: pills stay inline-level (no line
+   breaks, no flex-item squeezing), align on the text baseline like the static
+   names they replace, and inherit underline so <u> wraps render visibly. */
 .tpl-visual-editor .tpl-ph {
     display: inline-block;
+    vertical-align: baseline;
+    float: none;
+    clear: none;
     background: #eff6ff;
     border: 1px solid #93c5fd;
     border-radius: 5px;
     color: #1d4ed8;
     font-family: Consolas, Menlo, monospace;
     font-size: 12.5px;
+    line-height: normal;
     padding: 1px 6px;
+    margin: 0 1px;
     cursor: default;
     user-select: all;
+    -webkit-user-select: all;
     white-space: nowrap;
+    max-width: 100%;
+    text-decoration: inherit;
+    text-underline-offset: 2px;
+}
+
+/* Underline applied around a pill (ribbon <u> / execCommand) must visibly
+   underline the pill text. Inline-block boxes do not inherit the ancestor
+   decoration line, so re-assert it on the pill itself. */
+.tpl-visual-editor u .tpl-ph,
+.tpl-visual-editor .tpl-ph.tpl-ph-underline,
+.tpl-visual-editor .tpl-ph[style*="underline"] {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+/* Bold/italic ancestors wrap pills on insert; keep the pill glyphs in sync. */
+.tpl-visual-editor b .tpl-ph,
+.tpl-visual-editor strong .tpl-ph {
+    font-weight: bold;
+}
+
+.tpl-visual-editor i .tpl-ph,
+.tpl-visual-editor em .tpl-ph {
+    font-style: italic;
+}
+
+/* Click/drag selection feedback. Outline (not border) so selecting a pill
+   never shifts surrounding text or the signature line. */
+.tpl-visual-editor .tpl-ph.tpl-ph-selected {
+    outline: 2px solid #2563eb;
+    outline-offset: 1px;
 }
 
 .tpl-token-summary {

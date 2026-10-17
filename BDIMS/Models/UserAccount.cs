@@ -93,6 +93,25 @@ namespace BDIMS.Models
         public string Initials { get; set; } = string.Empty;
 
         /// <summary>
+        /// File name of the uploaded profile photo inside the application's private
+        /// photo folder (see <c>BDIMS.Services.ProfilePhotoStore</c>), or <c>null</c>
+        /// when the account has never uploaded one.
+        ///
+        /// Only the generated file name is stored, never a client-supplied path: the
+        /// name is rebuilt from the account id and a timestamp, so a tampered request
+        /// cannot make the application read or overwrite a file outside the photo
+        /// folder. The image itself is served by <c>AccountController.ProfilePhoto</c>
+        /// rather than from <c>wwwroot</c>, because these are staff photographs and
+        /// static files would be readable by anyone who guessed the URL.
+        ///
+        /// The badges fall back to <see cref="Initials"/> while this is null, so
+        /// accounts created before the My Profile page existed keep rendering exactly
+        /// as they always have.
+        /// </summary>
+        [MaxLength(128)]
+        public string? ProfilePhoto { get; set; }
+
+        /// <summary>
         /// Grants the full administrative policy (every module: Blotter, Announcements,
         /// Documents, Certificates, Reports, Settings).
         /// </summary>
@@ -109,6 +128,13 @@ namespace BDIMS.Models
         public const string DisplayNameClaim = "bdims:display_name";
         public const string RoleClaim = "bdims:role";
         public const string InitialsClaim = "bdims:initials";
+
+        /// <summary>
+        /// File name of the signed-in user's uploaded photo, or an empty string when
+        /// they have none. Carried in the cookie for the same reason as the initials:
+        /// every badge on every page reads the claim instead of hitting the database.
+        /// </summary>
+        public const string ProfilePhotoClaim = "bdims:profile_photo";
 
         /// <summary>
         /// Builds the lookup key for an email/username. Ordinal casing is forced with

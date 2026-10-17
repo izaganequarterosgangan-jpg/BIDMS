@@ -39,6 +39,12 @@ secrets.json
 **/App_Data/*.corrupt-*
 **/App_Data/*.bak
 
+## Uploaded profile photos (App_Data/profile_photos). Written at runtime by
+## AccountController.ChangePhoto and read back through the authorised
+## /Account/ProfilePhoto route, never committed: these are staff photographs and the
+## directory is expected to be empty in a fresh checkout.
+**/App_Data/profile_photos/
+
 ## Local database and logs
 *.mdf
 *.ldf

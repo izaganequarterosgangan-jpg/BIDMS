@@ -95,27 +95,27 @@
                                     <span class="status-pill @statusClass">@item.Status</span>
                                 </td>
                                 <td>
-                                    <div class="action-cell">
-                                        <button type="button" class="icon-btn preview"
+                                    <div class="action-cell doc-actions">
+                                        <button type="button" class="icon-btn-case icon-view"
                                                 data-action="view-doc"
-                                                title="View Details">
+                                                title="View Details" aria-label="View request details">
                                             <i class="bi bi-eye"></i>
                                         </button>
-                                        <button type="button" class="icon-btn edit"
+                                        <button type="button" class="icon-btn-case icon-edit"
                                                 data-action="edit-doc"
-                                                title="Update Status">
-                                            <i class="bi bi-pencil-square"></i>
+                                                title="Update Status" aria-label="Edit request status">
+                                            <i class="bi bi-pencil"></i>
                                         </button>
                                         @if (item.Status == "Approved")
                                         {
-                                            <a class="icon-btn approve" title="Issue Certificate"
+                                            <a class="icon-btn-case icon-print" title="Issue Certificate" aria-label="Issue certificate"
                                                href="@Url.Action("Certificates", "Home", new { issue = "true", resident = item.Resident, title = item.Title, purpose = item.Purpose })">
                                                 <i class="bi bi-award"></i>
                                             </a>
                                         }
-                                        <button type="button" class="icon-btn danger"
+                                        <button type="button" class="icon-btn-case icon-delete"
                                                 data-action="delete-doc"
-                                                title="Delete Request">
+                                                title="Delete Request" aria-label="Delete request">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </div>

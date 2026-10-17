@@ -26,6 +26,36 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
 
+        // Session Timeout is administrator-configurable on Settings > System &
+        // Security, so the idle window is enforced here against the stored value
+        // rather than being frozen at startup. ExpireTimeSpan above stays as the
+        // hard ceiling on the cookie itself; this check measures the time since
+        // the ticket was last renewed and signs the user out once it passes the
+        // configured window. ShouldRenew slides that window forward on every
+        // request, which is what makes it an *idle* timeout rather than a fixed
+        // lifetime. The setting is read through the provider, so a change saved in
+        // Settings applies to the next request with no restart.
+        options.Events.OnValidatePrincipal = context =>
+        {
+            var settings =
+                context.HttpContext.RequestServices
+                    .GetRequiredService<BDIMS.Services.SystemSettingsProvider>();
+
+            var issued = context.Properties.IssuedUtc ?? DateTimeOffset.UtcNow;
+
+            if (DateTimeOffset.UtcNow - issued > settings.Current.SessionTimeoutSpan)
+            {
+                // Idle for longer than the configured window. RejectPrincipal ends
+                // the session; the AJAX branch of OnRedirectToLogin turns the
+                // resulting challenge into a 401 instead of an HTML redirect.
+                context.RejectPrincipal();
+                return Task.CompletedTask;
+            }
+
+            context.ShouldRenew = true;
+            return Task.CompletedTask;
+        };
+
         // A request that is already carrying a valid cookie must never be bounced back
         // to the login page: the cookie events below only react to *rejected* cookies.
         options.Events.OnRedirectToLogin = context =>
@@ -76,6 +106,12 @@ builder.Services.Configure<BDIMS.Models.BarangayOptions>(
 // a lock because a singleton is read concurrently.
 builder.Services.AddSingleton<BDIMS.Services.BarangayProfileProvider>();
 
+// Same shape for the Settings > System & Security preferences (auto-approve,
+// notification channels, two-factor, session timeout). Singleton with an internal
+// cache, no direct scoped dependency, so document creation and the auth cookie can
+// read the live values on every request.
+builder.Services.AddSingleton<BDIMS.Services.SystemSettingsProvider>();
+
 // Register ApplicationDbContext with Pomelo MySQL Provider
 //
 // The connection string is not stored in appsettings.json. Development picks it up
@@ -108,6 +144,11 @@ builder.Services.AddAntiforgery(options =>
 
 // Bind certificate template layouts to App_Data/certificate_templates.json.
 BDIMS.Services.CertificateTemplateStore.Configure(builder.Environment);
+
+// Point the profile-photo store at App_Data/profile_photos. Configured here for the
+// same reason as the template store: both are file-backed and need the content root
+// resolved once at startup rather than injected per request.
+BDIMS.Services.ProfilePhotoStore.Configure(builder.Environment);
 
 // Tell the renderer which identity literals to recognise as baked-in text. A layout
 // saved before the profile became editable (e.g. imported from a .docx) hard-codes

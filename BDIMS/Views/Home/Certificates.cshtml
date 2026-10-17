@@ -10,6 +10,10 @@
     var defaultAddress = $"{BarangayCfg.Value.BarangayName}, {BarangayCfg.Value.Municipality}, {BarangayCfg.Value.Province}";
 }
 
+@section Styles {
+    <link rel="stylesheet" href="~/css/Certificates.css" asp-append-version="true" />
+}
+
 <header class="top-header">
     <div>
         <h2 class="header-title">Certificates</h2>
@@ -84,24 +88,32 @@
                                 </span>
                             </td>
                             <td>
-                                <div class="action-cell">
-                                    <button type="button" class="icon-btn" title="Preview" data-action="preview"
+                                <div class="action-cell cert-actions">
+                                    <button type="button" class="icon-btn cert-view" title="Preview" aria-label="Preview certificate" data-action="preview"
                                             data-id="@item.Id" data-title="@item.Title" data-resident="@item.Resident"
                                             data-age="@item.ResidentAge" data-purok="@item.Purok" data-address="@item.Address"
                                             data-purpose="@item.Purpose" data-issued="@item.IssuedDateDisplay" data-ornumber="@item.OrNumber"
                                             data-amount="@item.AmountPaid">
-                                        👁️
+                                        <i class="bi bi-eye"></i>
                                     </button>
-                                    <button type="button" class="icon-btn print-icon-btn" title="Print" data-action="print"
+                                    <button type="button" class="icon-btn cert-edit" title="Edit" aria-label="Edit certificate" data-action="edit"
+                                            data-id="@item.Id" data-title="@item.Title" data-resident="@item.Resident"
+                                            data-age="@item.ResidentAge" data-purok="@item.Purok" data-address="@item.Address"
+                                            data-purpose="@item.Purpose" data-issued="@item.IssuedDateDisplay"
+                                            data-issuedate="@(item.IssueDate?.ToString("yyyy-MM-dd") ?? string.Empty)" data-ornumber="@item.OrNumber"
+                                            data-amount="@item.AmountPaid">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="icon-btn cert-print" title="Print" aria-label="Print certificate" data-action="print"
                                             data-id="@item.Id" data-title="@item.Title" data-resident="@item.Resident"
                                             data-age="@item.ResidentAge" data-purok="@item.Purok" data-address="@item.Address"
                                             data-purpose="@item.Purpose" data-issued="@item.IssuedDateDisplay" data-ornumber="@item.OrNumber"
                                             data-amount="@item.AmountPaid">
-                                        🖨️
+                                        <i class="bi bi-printer"></i>
                                     </button>
-                                    <button type="button" class="icon-btn" title="Delete" data-action="delete"
+                                    <button type="button" class="icon-btn cert-delete" title="Delete" aria-label="Delete certificate" data-action="delete"
                                             data-id="@item.Id">
-                                        🗑️
+                                        <i class="bi bi-trash"></i>
                                     </button>
                                 </div>
                             </td>
@@ -224,6 +236,73 @@
                     <button type="button" class="primary-modal-btn" data-action="print-preview">🖨️ Print Document</button>
                 </div>
 
+        </div>
+    </div>
+</div>
+
+<div id="editModal" class="modal fade" tabindex="-1" aria-hidden="true" aria-labelledby="editModalLabel">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editModalLabel"><i class="bi bi-pencil-square me-1"></i> Edit Certificate</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-action="UpdateCertificate" method="post" id="editCertificateForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" id="editCertId" />
+                <div class="modal-body d-flex flex-column gap-3">
+                    <p class="form-text mb-0">Certificate <strong id="editCertIdDisplay"></strong> — the control number never changes.</p>
+                    <label class="form-label">Resident Name
+                        <input type="text" name="resident" id="editResident" class="form-control"
+                               list="certResidentsDatalist" autocomplete="off" required />
+                    </label>
+
+                    <div class="row g-2">
+                        <div class="col">
+                            <label class="form-label">Resident Age
+                                <input type="number" name="residentAge" id="editResidentAge"
+                                       min="1" max="130" class="form-control" placeholder="17" />
+                            </label>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">Purok
+                                <select name="purok" id="editPurok" class="form-select">
+                                    <option value="">-- Select Purok --</option>
+                                    @foreach (var p in Model.Puroks)
+                                    {
+                                        <option value="@p">@p</option>
+                                    }
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+
+                    <label class="form-label">Address
+                        <input type="text" name="address" id="editAddress" class="form-control" />
+                    </label>
+
+                    <label class="form-label">Certificate Type
+                        <select name="title" id="editTitle" class="form-select" required>
+                            @foreach (var cert in Model.CertificateTypes)
+                            {
+                                <option value="@cert.Type">@cert.Type</option>
+                            }
+                        </select>
+                    </label>
+
+                    <label class="form-label">Purpose
+                        <input type="text" name="purpose" id="editPurpose" class="form-control" required />
+                    </label>
+
+                    <label class="form-label">Date Issued
+                        <input type="date" name="issueDate" id="editIssueDate" class="form-control" />
+                    </label>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i> Save Changes</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

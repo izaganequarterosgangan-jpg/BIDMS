@@ -20,8 +20,15 @@ namespace BDIMS.Models
         public bool AutoApproveLowRisk { get; set; } = true;
         public bool EmailNotifications { get; set; } = true;
         public bool SmsNotifications { get; set; } = false;
+
+        /// <summary>Staff-activity audit trail toggle shown on System Preferences.</summary>
+        public bool AuditLogging { get; set; } = true;
+
         public string TwoFactorAuth { get; set; } = "Required";
         public string SessionTimeout { get; set; } = "30";
+
+        /// <summary>Password complexity preset shown on the Security card.</summary>
+        public string PasswordPolicy { get; set; } = "Standard";
 
         // Current tab
         public string ActiveTab { get; set; } = "general";

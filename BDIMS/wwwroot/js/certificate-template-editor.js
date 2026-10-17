@@ -209,6 +209,107 @@
         }
     }
 
+    /* Pills are atomic (contenteditable="false"), so the caret can never sit
+       inside one. These helpers locate the pill behind the current selection
+       and move the caret to a text position just outside it, which keeps
+       spaces, tabs, arrows and underline working around the badge instead of
+       replacing or trapping it. */
+    function pillFromNode(node) {
+        if (!node) return null;
+        if (node.nodeType === 1 && node.hasAttribute &&
+            node.hasAttribute('data-tpl-token')) return node;
+        if (node.nodeType === 3 && node.parentNode && node.parentNode.hasAttribute &&
+            node.parentNode.hasAttribute('data-tpl-token')) return node.parentNode;
+        if (node.closest) {
+            try { return node.closest('span[data-tpl-token]'); } catch (e) { return null; }
+        }
+        return null;
+    }
+
+    function getActivePill() {
+        var sel = window.getSelection ? window.getSelection() : null;
+        if (!sel || sel.rangeCount === 0 || !visual || !visual.contains(sel.anchorNode)) return null;
+        // Prefer the pill directly under the caret/focus: with duplicate tokens
+        // (e.g. two {{ BarangayCaptain }} pills) a range-content lookup would
+        // always return the first match, so check the live nodes first.
+        var direct = pillFromNode(sel.anchorNode);
+        if (direct && visual.contains(direct)) return direct;
+        var focus = pillFromNode(sel.focusNode);
+        if (focus && visual.contains(focus)) return focus;
+        var range = sel.getRangeAt(0);
+        if (!range.collapsed) {
+            var frag = range.cloneContents();
+            var inner = frag.querySelector ? frag.querySelector('span[data-tpl-token]') : null;
+            if (inner) {
+                var name = inner.getAttribute('data-tpl-token');
+                // Return the pill actually touched by the range, not just the
+                // first pill in the document with the same token name.
+                var candidates = visual.querySelectorAll('span[data-tpl-token="' + name + '"]');
+                for (var i = 0; i < candidates.length; i++) {
+                    try {
+                        if (range.intersectsNode(candidates[i])) return candidates[i];
+                    } catch (e) { /* older browsers: fall through */ }
+                }
+                if (candidates.length) return candidates[0];
+            }
+        }
+        // Caret parked directly against a pill (anchor is the parent block and
+        // the offset touches the pill node) counts as "on" the pill.
+        if (sel.anchorNode && sel.anchorNode.nodeType === 1 && visual.contains(sel.anchorNode)) {
+            var parent = sel.anchorNode;
+            var at = sel.anchorOffset;
+            var before = parent.childNodes[at - 1];
+            var after = parent.childNodes[at];
+            var touch = pillFromNode(after) || pillFromNode(before);
+            if (touch && visual.contains(touch)) return touch;
+        }
+        return null;
+    }
+
+    function clearPillSelection(except) {
+        if (!visual) return;
+        var pills = visual.querySelectorAll('span[data-tpl-token].tpl-ph-selected');
+        for (var i = 0; i < pills.length; i++) {
+            if (pills[i] !== except) pills[i].classList.remove('tpl-ph-selected');
+        }
+    }
+
+    function placeCaretBefore(pill) {
+        var range = document.createRange();
+        range.setStartBefore(pill);
+        range.collapse(true);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
+    function placeCaretAfter(pill) {
+        var range = document.createRange();
+        range.setStartAfter(pill);
+        range.collapse(true);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
+    function togglePillUnderline(pill) {
+        if (!pill) return false;
+        var u = pill.closest ? pill.closest('u') : null;
+        if (u && visual.contains(u)) {
+            // Already underlined: lift the pill (and any siblings) out so the
+            // surrounding <u> is removed without breaking sibling markup.
+            var parent = u.parentNode;
+            while (u.firstChild) parent.insertBefore(u.firstChild, u);
+            parent.removeChild(u);
+        } else {
+            var wrap = document.createElement('u');
+            pill.parentNode.insertBefore(wrap, pill);
+            wrap.appendChild(pill);
+        }
+        pill.classList.add('tpl-ph-selected');
+        return true;
+    }
+
     /* contenteditable leaves behind stray empty block elements and <br> filler at the
        end of the document; those would otherwise show up as phantom blank lines. */
     function stripEditingArtifacts(root) {
@@ -264,11 +365,23 @@
 
     function cleanAttributes(el, tag) {
         var attributes = Array.prototype.slice.call(el.attributes);
+        var isTokenPill = tag === 'SPAN' && el.hasAttribute &&
+            (el.hasAttribute('data-tpl-token') ||
+                (el.className && (' ' + el.className + ' ').indexOf(' tpl-ph ') !== -1));
 
         for (var i = 0; i < attributes.length; i++) {
             var name = attributes[i].name.toLowerCase();
             var value = attributes[i].value || '';
             var drop = false;
+
+            // Placeholder pills are editor-only chrome (<span class="tpl-ph"
+            // contenteditable="false" data-tpl-token="...">). Keep the token name
+            // and the atomic flag through paste/import so storage keeps writing
+            // {{ Name }} and the pill keeps rendering inline.
+            if (isTokenPill && (name === 'data-tpl-token' ||
+                (name === 'contenteditable' && value === 'false'))) {
+                continue;
+            }
 
             if (name.indexOf('on') === 0) {
                 // Keep only the seal-loading fallbacks on images.
@@ -357,6 +470,62 @@
         schedulePreview();
     }
 
+    /* Range-based pill insertion. Deletes the current editor range (a highlight
+       like "HON. CELES P. PONDAVILLA" or a collapsed caret) and inserts the
+       pill markup there, then parks the caret just after the new pill. Returns
+       true on success; false lets the caller fall back to execCommand. */
+    function insertPillAtSelection(html) {
+        var sel = window.getSelection ? window.getSelection() : null;
+        if (!sel || !visual) return false;
+        var range = null;
+        try {
+            if (sel.rangeCount > 0) range = sel.getRangeAt(0);
+        } catch (e) { range = null; }
+        if (range && !rangeInsideVisual(range)) {
+            // Stale range (e.g. a sidebar text selection): swap in the last
+            // remembered editor range so the pill lands in #tplVisual.
+            var remembered = (savedRange && rangeInsideVisual(savedRange))
+                ? savedRange
+                : ((lastVisualRange && rangeInsideVisual(lastVisualRange)) ? lastVisualRange : null);
+            if (!remembered) return false;
+            try {
+                sel.removeAllRanges();
+                sel.addRange(remembered.cloneRange());
+                range = sel.getRangeAt(0);
+            } catch (e) { return false; }
+        }
+        if (!range) return false;
+        try {
+            range.deleteContents();
+            var holder = document.createElement('div');
+            holder.innerHTML = html;
+            var frag = document.createDocumentFragment();
+            var last = null;
+            while (holder.firstChild) {
+                last = holder.firstChild;
+                frag.appendChild(last);
+            }
+            range.insertNode(frag);
+            // Caret after the inserted pill (or the trailing &nbsp;) so typing
+            // continues beside the badge instead of inside it.
+            var after = document.createRange();
+            if (last && last.parentNode) {
+                after.setStartAfter(last);
+            } else {
+                after.setStart(range.endContainer, range.endOffset);
+            }
+            after.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(after);
+            try {
+                savedRange = after.cloneRange();
+                lastVisualRange = after.cloneRange();
+            } catch (e) { /* ignore */ }
+            clearPillSelection(null);
+            return true;
+        } catch (e) { return false; }
+    }
+
     function insertToken(placeholder) {
         if (mode === 'source') {
             var start = source.selectionStart;
@@ -367,7 +536,50 @@
             source.selectionStart = source.selectionEnd = start + placeholder.length;
             source.focus();
         } else {
-            insertHtml(protectTokens(placeholder));
+            ensureVisualFocus();
+            // Pills are atomic and have side margins, but HTML still collapses
+            // plain spaces typed at the boundary in some browsers. Padding the
+            // inserted markup with non-breaking boundary spaces guarantees the
+            // {{ Name }} badge never merges with adjacent text and the caret
+            // lands after it, ready for normal spacing/alignment.
+            var match = /^\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}$/.exec(placeholder || '');
+            // Preserve any underline/bold/italic active at the caret: inherit
+            // them explicitly around the pill so the badge underlines, bolds
+            // and italicises exactly like the static text it replaces.
+            var selNow = window.getSelection();
+            var isU = !!(document.queryCommandState && document.queryCommandState('underline'));
+            var isB = !!(document.queryCommandState && document.queryCommandState('bold'));
+            var isI = !!(document.queryCommandState && document.queryCommandState('italic'));
+            // A highlighted range inside <u>/<b>/<i> reports queryCommandState
+            // unreliably once focus moved to the sidebar, so check ancestors too.
+            if (selNow && selNow.rangeCount > 0) {
+                try {
+                    var anc = selNow.getRangeAt(0).commonAncestorContainer;
+                    anc = anc && anc.nodeType === 3 ? anc.parentNode : anc;
+                    if (anc && visual.contains(anc) && anc.closest) {
+                        if (!isU && anc.closest('u')) isU = true;
+                        if (!isB && anc.closest('b,strong')) isB = true;
+                        if (!isI && anc.closest('i,em')) isI = true;
+                    }
+                } catch (e) { /* ignore */ }
+            }
+            var pre = (isU ? '<u>' : '') + (isB ? '<b>' : '') + (isI ? '<i>' : '');
+            var post = (isI ? '</i>' : '') + (isB ? '</b>' : '') + (isU ? '</u>' : '');
+            var html = match
+                ? '&nbsp;' + pre + protectTokens(placeholder) + post + '&nbsp;'
+                : protectTokens(placeholder);
+            // Replace the live range explicitly: execCommand('insertHTML')
+            // replaces a highlight, but refocusing the editor first can
+            // collapse the restored range in some browsers, which would insert
+            // beside the text instead of replacing it. The Range API deletes
+            // the highlight ("HON. CELES P. PONDAVILLA") and drops the pill in
+            // its place; execCommand remains as the fallback.
+            if (!insertPillAtSelection(html)) {
+                insertHtml(html);
+            } else {
+                syncHiddenInput();
+                schedulePreview();
+            }
         }
 
         syncHiddenInput();
@@ -792,6 +1004,19 @@
     // document selection. The range is recorded while the user types and clicks, so
     // the toolbar always knows which block it was aimed at.
     var savedRange = null;
+    var lastVisualRange = null;
+
+    function rangeInsideVisual(range) {
+        if (!range || !visual) return false;
+        try {
+            if (range.commonAncestorContainer &&
+                visual.contains(range.commonAncestorContainer)) return true;
+        } catch (e) { /* fall through */ }
+        try {
+            return visual.contains(range.startContainer) &&
+                visual.contains(range.endContainer);
+        } catch (e) { return false; }
+    }
 
     function rememberSelection() {
         if (!visual) return;
@@ -799,23 +1024,63 @@
         var sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return;
 
-        var range = sel.getRangeAt(0);
-        if (!visual.contains(range.commonAncestorContainer)) return;
+        var range = null;
+        try { range = sel.getRangeAt(0); } catch (e) { return; }
+        if (!rangeInsideVisual(range)) return;
 
-        savedRange = range.cloneRange();
+        try {
+            savedRange = range.cloneRange();
+            lastVisualRange = range.cloneRange();
+        } catch (e) { /* ignore */ }
     }
 
     function ensureSelection() {
         var sel = window.getSelection();
+        if (!sel) return false;
 
-        if (sel && sel.rangeCount > 0 && visual.contains(sel.getRangeAt(0).commonAncestorContainer)) {
-            return;
+        try {
+            if (sel.rangeCount > 0 && rangeInsideVisual(sel.getRangeAt(0))) {
+                return true;
+            }
+        } catch (e) { /* fall through to restore */ }
+
+        var candidate = (savedRange && rangeInsideVisual(savedRange))
+            ? savedRange
+            : ((lastVisualRange && rangeInsideVisual(lastVisualRange)) ? lastVisualRange : null);
+        if (!candidate) return false;
+
+        try {
+            sel.removeAllRanges();
+            sel.addRange(candidate.cloneRange());
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function ensureVisualFocus() {
+        if (!visual) return false;
+        // Focusing the editor collapses a live selection in some browsers,
+        // so restore the remembered editor range right after focus. When no
+        // editor range exists yet (never focused), park the caret at the end
+        // so a sidebar click still inserts somewhere sensible.
+        if (mode !== 'visual') return false;
+        try {
+            visual.focus({ preventScroll: true });
+        } catch (e) { visual.focus(); }
+        if (!ensureSelection()) {
+            var sel = window.getSelection();
+            if (sel && (sel.rangeCount === 0 || !rangeInsideVisual(sel.getRangeAt(0)))) {
+                var range = document.createRange();
+                range.selectNodeContents(visual);
+                range.collapse(false);
+                try {
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    savedRange = range.cloneRange();
+                    lastVisualRange = range.cloneRange();
+                } catch (e) { /* ignore */ }
+            }
         }
-
-        if (!savedRange) return;
-
-        sel.removeAllRanges();
-        sel.addRange(savedRange);
+        return true;
     }
 
     var TPL_BLOCK_TAGS = {
@@ -960,6 +1225,21 @@
         var spacing = button.getAttribute('data-spacing');
 
         if (command) {
+            // execCommand skips atomic (contenteditable="false") pills, so an
+            // underline aimed at {{ BarangayCaptain }} would silently land
+            // nowhere. Wrap/unwrap the pill explicitly instead.
+            if (command === 'underline') {
+                var pill = getActivePill();
+                if (pill) {
+                    event.preventDefault();
+                    ensureVisualFocus();
+                    clearPillSelection(pill);
+                    togglePillUnderline(pill);
+                    syncHiddenInput();
+                    schedulePreview();
+                    return;
+                }
+            }
             exec(command);
         } else if (block) {
             execBlock(block);
@@ -1005,6 +1285,118 @@
         if (event.dataTransfer && Array.prototype.indexOf.call(event.dataTransfer.types || [], 'Files') !== -1) {
             event.preventDefault();
             window.alert('Drag-and-drop image files is not supported. Use Insert Seal, or import a .docx/.html file that already embeds the logo.');
+        }
+    }
+
+    /* ---- Placeholder pill interaction ------------------------------------
+       Atomic pills cannot hold the caret, so without help the cursor gets
+       stuck on them: Space replaces them, Tab leaves the editor, arrows jump
+       erratically and Underline never lands. These handlers run before the
+       browser's default editing so:
+         - click selects the pill (drag + Delete/Backspace still work natively);
+         - arrows step over the pill to a live text position;
+         - Space types a space beside the pill instead of replacing it;
+         - Tab inserts an em-space tab stop instead of leaving the editor;
+         - Ctrl+U underlines the pill itself. */
+
+    function onVisualClick(event) {
+        var pill = event.target && event.target.closest
+            ? event.target.closest('span[data-tpl-token]')
+            : null;
+        if (!pill || !visual.contains(pill)) {
+            clearPillSelection(null);
+            return;
+        }
+        clearPillSelection(pill);
+        pill.classList.add('tpl-ph-selected');
+    }
+
+    function onVisualKeyDown(event) {
+        if (!visual) return;
+        var key = event.key;
+
+        // Ctrl/Cmd+U with the caret on (or around) a pill underlines that pill.
+        if ((event.ctrlKey || event.metaKey) && !event.altKey &&
+            (key === 'u' || key === 'U' || key === '＿')) {
+            var uPill = getActivePill();
+            if (uPill) {
+                event.preventDefault();
+                clearPillSelection(uPill);
+                togglePillUnderline(uPill);
+                syncHiddenInput();
+                schedulePreview();
+                return;
+            }
+            return;
+        }
+
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+        if (key === 'ArrowLeft' || key === 'ArrowRight') {
+            var edge = getActivePill();
+            if (!edge) return;
+            // Selection anchored inside an atomic pill cannot collapse by
+            // itself; step explicitly to the text position beside it.
+            event.preventDefault();
+            clearPillSelection(null);
+            if (key === 'ArrowLeft') placeCaretBefore(edge);
+            else placeCaretAfter(edge);
+            return;
+        }
+
+        if (key === 'Tab') {
+            var sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0 || !visual.contains(sel.anchorNode)) return;
+            // Keep tab stops inside the signature line so pills can be tabbed
+            // into place above "Punong Barangay".
+            event.preventDefault();
+            clearPillSelection(null);
+            document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
+            syncHiddenInput();
+            schedulePreview();
+            return;
+        }
+
+        if (key === ' ') {
+            var spacePill = getActivePill();
+            if (!spacePill) return;
+            // Typing Space with an atomic pill selected replaces it in Chrome
+            // and Edge. Insert a real space beside the pill instead.
+            event.preventDefault();
+            clearPillSelection(null);
+            placeCaretAfter(spacePill);
+            document.execCommand('insertText', false, ' ');
+            syncHiddenInput();
+            schedulePreview();
+            return;
+        }
+
+        if (key === 'Backspace' || key === 'Delete') {
+            var sel2 = window.getSelection();
+            if (!sel2 || sel2.rangeCount === 0) return;
+            var range = sel2.getRangeAt(0);
+            if (!range.collapsed || !visual.contains(sel2.anchorNode)) return;
+            var near = getActivePill();
+            if (!near) return;
+            var parent = sel2.anchorNode.nodeType === 1
+                ? sel2.anchorNode
+                : sel2.anchorNode.parentNode;
+            var at = sel2.anchorOffset;
+            var before = parent && parent.childNodes ? parent.childNodes[at - 1] : null;
+            var after = parent && parent.childNodes ? parent.childNodes[at] : null;
+            var adjacent = key === 'Backspace'
+                ? (pillFromNode(before) || (pillFromNode(sel2.anchorNode) && before === null ? near : null))
+                : (pillFromNode(after) || (pillFromNode(sel2.anchorNode) ? near : null));
+            if (adjacent) {
+                // Remove exactly the pill; the default atomic deletion can
+                // take the wrapping <u>/<b> (and sibling spaces) with it.
+                event.preventDefault();
+                clearPillSelection(null);
+                placeCaretBefore(adjacent);
+                adjacent.remove();
+                syncHiddenInput();
+                schedulePreview();
+            }
         }
     }
 
@@ -1236,7 +1628,44 @@
         visual.addEventListener('paste', onPaste);
         visual.addEventListener('drop', onVisualDrop);
         visual.addEventListener('mousedown', onVisualMouseDown);
+        visual.addEventListener('click', onVisualClick);
+        visual.addEventListener('keydown', onVisualKeyDown);
         visual.addEventListener('scroll', syncImageUi, { passive: true });
+        // Selection inside contenteditable can change without key/mouse events
+        // on the editor itself (touch, IME, or sidebar mousedown stealing
+        // focus), so mirror every selection change while it stays in #tplVisual.
+        document.addEventListener('selectionchange', function () {
+            var sel = window.getSelection ? window.getSelection() : null;
+            if (!sel || sel.rangeCount === 0 || !visual) return;
+            try {
+                if (rangeInsideVisual(sel.getRangeAt(0))) rememberSelection();
+            } catch (e) { /* ignore */ }
+        });
+        // Sidebar tag buttons steal focus on mousedown, which collapses the
+        // highlighted range before the click handler runs. Suppressing the
+        // default focus shift keeps "HON. CELES P. PONDAVILLA" highlighted so
+        // tplInsertToken() replaces it with the pill.
+        var tokenPalette = document.getElementById('tplTokenPalette');
+        if (tokenPalette) {
+            tokenPalette.addEventListener('mousedown', function (event) {
+                var btn = event.target && event.target.closest
+                    ? event.target.closest('.tpl-token')
+                    : null;
+                if (btn) event.preventDefault();
+            });
+            // If the editor never had focus (fresh load), remember the end of
+            // the document so the first tag click inserts there.
+            tokenPalette.addEventListener('click', function () {
+                if (!savedRange && !lastVisualRange && visual) {
+                    try {
+                        var end = document.createRange();
+                        end.selectNodeContents(visual);
+                        end.collapse(false);
+                        lastVisualRange = end.cloneRange();
+                    } catch (e) { /* ignore */ }
+                }
+            });
+        }
         source.addEventListener('input', schedulePreview);
 
         buildImageUi();

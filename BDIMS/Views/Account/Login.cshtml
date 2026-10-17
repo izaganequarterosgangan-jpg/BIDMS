@@ -100,22 +100,8 @@
                         <label asp-for="KeepSigned" class="checkbox-label" for="keepSigned"></label>
                     </div>
 
-                    @* Validation errors from the controller. asp-validation-summary only
-                       emits an empty container that the unobtrusive validation script
-                       fills from client-side rules, so the ModelState errors that
-                       AccountController adds for a bad username or password never
-                       appeared and the form came back looking blank. Rendered on the
-                       server so it works even with JavaScript unavailable. *@
+                    @* Single server-side error container for invalid credentials. *@
                     <div class="error-text" asp-validation-summary="ModelOnly"></div>
-                    @if (!ViewData.ModelState.IsValid)
-                    {
-                        <ul class="error-text">
-                            @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
-                            {
-                                <li>@error.ErrorMessage</li>
-                            }
-                        </ul>
-                    }
 
                     <button type="submit" class="sign-in-btn">
                         Sign In to BIDMS &rarr;

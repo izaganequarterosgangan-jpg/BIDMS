@@ -83,17 +83,19 @@
                                         @post.Priority
                                     </span>
                                 </td>
-                                <td>
-                                    <div class="action-buttons d-flex align-items-center gap-2">
+                                <td class="ann-action-cell">
+                                    <div class="action-buttons ann-actions">
                                         <!-- Plain button rather than a nested form, matching what
                                              rowHtml() emits for live rows, so a row looks and
-                                             behaves the same however it was added. -->
-                                        <button type="button" class="edit-btn" data-edit-id="@post.Id">
-                                            <i data-lucide="pencil"></i>Edit
+                                             behaves the same however it was added. Icon-only, using
+                                             the shared .icon-btn-case geometry + amber/red outline
+                                             colors from the Certificates/Blotter tables. -->
+                                        <button type="button" class="icon-btn-case icon-edit" data-edit-id="@post.Id" title="Edit" aria-label="Edit announcement">
+                                            <i class="bi bi-pencil"></i>
                                         </button>
                                         <form asp-controller="Home" asp-action="DeleteAnnouncement" asp-route-id="@post.Id" method="post" class="d-inline" data-delete-form>
                                             @Html.AntiForgeryToken()
-                                            <button type="submit" class="delete-btn"><i data-lucide="trash-2"></i>Delete</button>
+                                            <button type="submit" class="icon-btn-case icon-delete" title="Delete" aria-label="Delete announcement"><i class="bi bi-trash"></i></button>
                                         </form>
                                     </div>
                                 </td>
@@ -381,6 +383,18 @@
                 var newDelete = replacement.querySelector('[data-delete-id]');
 
                 if (oldForm && newDelete) {
+                    // Rebuild the form's submit button as the new icon-only
+                    // outline button so an edited server row matches the rest of
+                    // the table. The old text-label button is dropped; the form
+                    // (action + antiforgery token) is preserved.
+                    oldForm.innerHTML = '';
+                    var iconDelete = document.createElement('button');
+                    iconDelete.type = 'submit';
+                    iconDelete.className = 'icon-btn-case icon-delete';
+                    iconDelete.title = 'Delete';
+                    iconDelete.setAttribute('aria-label', 'Delete announcement');
+                    iconDelete.innerHTML = '<i class="bi bi-trash"></i>';
+                    oldForm.appendChild(iconDelete);
                     var wrapper = document.createElement('div');
                     wrapper.className = 'd-inline';
                     wrapper.appendChild(oldForm);
@@ -389,9 +403,8 @@
 
                 row.parentNode.replaceChild(replacement, row);
 
-                // The replacement carries raw <i data-lucide> placeholders again, so
-                // the icon pass has to run or both buttons render as blank boxes.
-                if (typeof refreshIcons === 'function') { refreshIcons(); }
+                // New rows use inline <i class="bi"> icons (Bootstrap Icons ship
+                // with the layout), so no lucide refresh pass is needed.
             }
 
             // Walks up to the owning button by hand, walking through text and SVG
@@ -471,15 +484,16 @@
                     '<td><span class="audience-badge">' + escapeHtml(data.targetAudience) + '</span></td>' +
                     '<td class="post-date">' + escapeHtml(data.date) + '</td>' +
                     '<td><span class="priority-tag priority-' + escapeHtml(String(data.priority || '').toLowerCase()) + '">' + escapeHtml(data.priority) + '</span></td>' +
-                    '<td><div class="action-buttons d-flex align-items-center gap-2">' +
+                    '<td class="ann-action-cell"><div class="action-buttons ann-actions">' +
                         // A plain button rather than the nested <form> the server
                         // renders: the HTML parser drops a form element from table
                         // markup, which silently removed the delete control from a
                         // row added this way. The Edit control is a plain button for
                         // the same reason, and both classes/spacing match the Razor
                         // markup exactly so the column lines up either way.
-                        '<button type="button" class="edit-btn" data-edit-id="' + escapeHtml(String(data.id == null ? '' : data.id)) + '"><i data-lucide="pencil"></i>Edit</button>' +
-                        '<button type="button" class="delete-btn" data-delete-id="' + escapeHtml(String(data.id == null ? '' : data.id)) + '"><i data-lucide="trash-2"></i>Delete</button>' +
+                        // Icon-only, matching the server-rendered row above.
+                        '<button type="button" class="icon-btn-case icon-edit" title="Edit" aria-label="Edit announcement" data-edit-id="' + escapeHtml(String(data.id == null ? '' : data.id)) + '"><i class="bi bi-pencil"></i></button>' +
+                        '<button type="button" class="icon-btn-case icon-delete" title="Delete" aria-label="Delete announcement" data-delete-id="' + escapeHtml(String(data.id == null ? '' : data.id)) + '"><i class="bi bi-trash"></i></button>' +
                     '</div></td>' +
                 '</tr>';
             }

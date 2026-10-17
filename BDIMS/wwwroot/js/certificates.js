@@ -117,6 +117,8 @@
                     printCert(certFromBtn(btn));
                 } else if (action === 'print-preview') {
                     printPreviewedCert();
+                } else if (action === 'edit') {
+                    openEditCert(btn);
                 } else if (action === 'delete') {
                     deleteCert(btn);
                 }
@@ -212,6 +214,99 @@
                         }
                     })
                     .catch(function () { /* status stays as-is; print already succeeded */ });
+            }
+
+            function setSelectValue(id, value) {
+                var sel = field(id);
+                if (!sel) return;
+                var target = (value || '').toLowerCase();
+                for (var i = 0; i < sel.options.length; i++) {
+                    if ((sel.options[i].value || '').toLowerCase() === target) {
+                        sel.selectedIndex = i;
+                        return;
+                    }
+                }
+            }
+
+            // Prefills the Edit modal from the row button's data attributes and
+            // shows it. Data comes from the server-rendered row, so no extra
+            // fetch is needed and the modal opens instantly.
+            function openEditCert(btn) {
+                field('editCertId').value = btn.getAttribute('data-id') || '';
+                field('editCertIdDisplay').textContent = btn.getAttribute('data-id') || '';
+                field('editResident').value = btn.getAttribute('data-resident') || '';
+                field('editResidentAge').value = btn.getAttribute('data-age') || '';
+                field('editAddress').value = btn.getAttribute('data-address') || '';
+                field('editPurpose').value = btn.getAttribute('data-purpose') || '';
+                field('editIssueDate').value = btn.getAttribute('data-issuedate') || '';
+                setSelectValue('editPurok', btn.getAttribute('data-purok'));
+                setSelectValue('editTitle', btn.getAttribute('data-title'));
+                showModal('editModal');
+            }
+
+            // Patches the row cells in place from the server's updated record and
+            // refreshes every action button's data attributes, so a second edit or
+            // a preview/print uses the new values without a page reload.
+            function applyEditedRow(item) {
+                var tr = rowForId(item.id);
+                if (!tr) return;
+                var cells = tr.querySelectorAll('td');
+                // Column order: ID | Type | Resident | Purpose | Date Issued | Status | Actions.
+                if (cells.length >= 7) {
+                    cells[1].textContent = item.title || '';
+                    cells[2].textContent = item.resident || '';
+                    cells[3].textContent = item.purpose || '';
+                    cells[4].textContent = item.issued || '';
+                }
+                var btns = tr.querySelectorAll('button[data-action="preview"], button[data-action="print"], button[data-action="edit"]');
+                for (var i = 0; i < btns.length; i++) {
+                    btns[i].setAttribute('data-title', item.title || '');
+                    btns[i].setAttribute('data-resident', item.resident || '');
+                    btns[i].setAttribute('data-age', item.residentAge || '');
+                    btns[i].setAttribute('data-purok', item.purok || '');
+                    btns[i].setAttribute('data-address', item.address || '');
+                    btns[i].setAttribute('data-purpose', item.purpose || '');
+                    btns[i].setAttribute('data-issued', item.issued || '');
+                    if (btns[i].getAttribute('data-action') === 'edit') {
+                        btns[i].setAttribute('data-issuedate', item.issuedate || '');
+                    }
+                }
+            }
+
+            function submitEditCert(event) {
+                event.preventDefault();
+                var form = field('editCertificateForm');
+                if (!form) return;
+                fetch(form.action, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new FormData(form)
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (d && d.success && d.item) {
+                            applyEditedRow(d.item);
+                            refreshCounters(d);
+                            hideModal(field('editModal'));
+                        } else {
+                            window.alert((d && d.message) || 'Unable to update this certificate.');
+                        }
+                    })
+                    .catch(function () { window.alert('Unable to update this certificate.'); });
+            }
+
+            function hideModal(modal) {
+                if (!modal) return;
+                // Bootstrap path first; plain-style.display fallback covers the
+                // non-Bootstrap fallback branch of showModal().
+                if (typeof window.bootstrap !== 'undefined' && bootstrap.Modal) {
+                    try {
+                        var instance = bootstrap.Modal.getInstance(modal) ||
+                            bootstrap.Modal.getOrCreateInstance(modal);
+                        if (instance) { instance.hide(); return; }
+                    } catch (e) { /* fall through to style fallback */ }
+                }
+                modal.style.display = 'none';
             }
 
             function deleteCert(btn) {
@@ -421,6 +516,11 @@
                     fillFeeFromCertType();
                     loadCertFormat();
                 });
+
+                // Edit modal: intercept the post so the row updates in place without
+                // a reload. The form's asp-action still points at UpdateCertificate,
+                // so a no-JS submit degrades to the normal redirect flow.
+                on('editCertificateForm', 'submit', submitEditCert);
 
                 fillFeeFromCertType();
                 loadCertFormat();

@@ -47,10 +47,21 @@
         </div>
         @* Both profile badges (this header avatar and the sidebar footer block) link to
            My Profile. The badge keeps its own class and dimensions; only the anchor is
-           added, so the header height, its gap and the flex row are untouched. *@
+           added, so the header height, its gap and the flex row are untouched. The
+           badge shows the uploaded photo when there is one and the initials
+           otherwise, in either case filling the same 36px box. *@
         <a asp-controller="Account" asp-action="Profile" class="profile-badge-link" title="My Profile">
-            <div class="header-avatar" title="@BDIMS.Services.UserClaims.GetDisplayName(User)">
-                @BDIMS.Services.UserClaims.GetInitials(User)
+            <div class="header-avatar" data-user-avatar
+                 title="@BDIMS.Services.UserClaims.GetDisplayName(User)">
+                @if (BDIMS.Services.UserClaims.GetPhotoUrl(User) is { } headerPhotoUrl)
+                {
+                    <img class="avatar-photo-image" src="@headerPhotoUrl"
+                         alt="@BDIMS.Services.UserClaims.GetDisplayName(User)" />
+                }
+                else
+                {
+                    @BDIMS.Services.UserClaims.GetInitials(User)
+                }
             </div>
         </a>
     </div>

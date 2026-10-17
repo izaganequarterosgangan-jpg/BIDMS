@@ -46,9 +46,20 @@
 
                 <!-- User Profile Initials Avatar -->
                 @* Same top-right profile badge as the Dashboard header. Only the anchor is
-                   added, so the badge, its size and the header row's gap are untouched.*@
+                   added, so the badge, its size and the header row's gap are untouched.
+                   Shows the uploaded photo when there is one, the initials otherwise. *@
                 <a asp-controller="Account" asp-action="Profile" class="profile-badge-link" title="My Profile">
-                    <div class="avatar-circle">@BDIMS.Services.UserClaims.GetInitials(User)</div>
+                    <div class="avatar-circle" data-user-avatar>
+                        @if (BDIMS.Services.UserClaims.GetPhotoUrl(User) is { } settingsPhotoUrl)
+                        {
+                            <img class="avatar-photo-image" src="@settingsPhotoUrl"
+                                 alt="@BDIMS.Services.UserClaims.GetDisplayName(User)" />
+                        }
+                        else
+                        {
+                            @BDIMS.Services.UserClaims.GetInitials(User)
+                        }
+                    </div>
                 </a>
             </div>
         </div>
@@ -391,39 +402,28 @@
                 <div class="settings-card">
                     <div class="card-header">
                         <h2>System Preferences</h2>
-                        <p>Configure notifications and document processing behavior.</p>
+                        <p>Configure resident alerts and staff activity tracking.</p>
                     </div>
 
                     <div class="settings-list">
                         <div class="setting-item">
                             <div>
-                                <h3>Auto-Approve Low Risk Requests</h3>
-                                <p>Automatically approve requests that meet configured low-risk requirements.</p>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" name="AutoApproveLowRisk" value="true" @(Model.AutoApproveLowRisk ? "checked" : "") />
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-
-                        <div class="setting-item">
-                            <div>
-                                <h3>Email Notifications</h3>
-                                <p>Send system notifications through email.</p>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" name="EmailNotifications" value="true" @(Model.EmailNotifications ? "checked" : "") />
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-
-                        <div class="setting-item">
-                            <div>
                                 <h3>SMS Notifications</h3>
-                                <p>Send important notifications through SMS.</p>
+                                <p>Send important alerts through SMS to resident contact numbers.</p>
                             </div>
                             <label class="toggle-switch">
                                 <input type="checkbox" name="SmsNotifications" value="true" @(Model.SmsNotifications ? "checked" : "") />
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="setting-item">
+                            <div>
+                                <h3>System Audit Logging</h3>
+                                <p>Record staff sign-ins and record changes for administrative accountability.</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="AuditLogging" value="true" @(Model.AuditLogging ? "checked" : "") />
                                 <span class="slider"></span>
                             </label>
                         </div>
@@ -433,31 +433,49 @@
                 <div class="settings-card">
                     <div class="card-header">
                         <h2>Security</h2>
-                        <p>Manage authentication and session security.</p>
+                        <p>Manage session security and account password rules.</p>
                     </div>
 
                     <div class="form-grid">
-                        <div class="form-group">
-                            <label>Two-Factor Authentication</label>
-                            <select name="TwoFactorAuth">
-                                <option value="Required" selected="@(Model.TwoFactorAuth == "Required")">Required</option>
-                                <option value="Optional" selected="@(Model.TwoFactorAuth == "Optional")">Optional</option>
-                                <option value="Disabled" selected="@(Model.TwoFactorAuth == "Disabled")">Disabled</option>
-                            </select>
-                        </div>
-
                         <div class="form-group">
                             <label>Session Timeout</label>
                             <select name="SessionTimeout">
                                 <option value="15" selected="@(Model.SessionTimeout == "15")">15 Minutes</option>
                                 <option value="30" selected="@(Model.SessionTimeout == "30")">30 Minutes</option>
                                 <option value="60" selected="@(Model.SessionTimeout == "60")">60 Minutes</option>
-                                <option value="120" selected="@(Model.SessionTimeout == "120")">120 Minutes</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Password Policy</label>
+                            <select name="PasswordPolicy">
+                                <option value="Standard" selected="@(Model.PasswordPolicy == "Standard")">Standard Rules</option>
+                                <option value="Strict" selected="@(Model.PasswordPolicy == "Strict")">Strict Rules</option>
                             </select>
                         </div>
                     </div>
                 </div>
             </form>
+
+            <!-- DATABASE MANAGEMENT & BACKUPS -->
+            @* Sits outside the Save Changes form on purpose: the download is a
+               standalone GET that streams a .sql file, so it must not be tied to the
+               settings POST. Uses the shared dark navy .btn-add-certificate style so
+               it matches the rest of the application's primary buttons. *@
+            <div class="settings-card">
+                <div class="card-header card-header-with-action">
+                    <div>
+                        <h2>Database Management &amp; Backups</h2>
+                        <p>Export local MySQL database snapshots to protect resident records and system logs.</p>
+                    </div>
+                    <a asp-controller="Home"
+                       asp-action="DownloadDatabaseBackup"
+                       class="btn-add-certificate"
+                       title="Download a .sql snapshot of the local database">
+                        <i class="bi bi-database-down me-1"></i> Download Database Backup (.sql)
+                    </a>
+                </div>
+            </div>
         }
 
         <!-- CERTIFICATE TEMPLATE EDITOR MODAL: the Dynamic Placeholders palette and the
@@ -531,10 +549,26 @@
 
 @section Scripts {
     <script>
+        // The top "Save Changes" button is outside the tabs, so it has to find the
+        // form belonging to whichever tab is on screen. Only one tab's form is
+        // rendered at a time, but a hidden modal form can still match a loose
+        // selector, so the visible form is preferred explicitly and the first
+        // visible candidate wins.
         function submitCurrentForm() {
-            var activeForm = document.querySelector('.settings-body form[method="post"]');
-            if (activeForm) {
-                activeForm.submit();
+            var forms = document.querySelectorAll('.settings-body form[method="post"]');
+            var target = null;
+
+            for (var i = 0; i < forms.length; i++) {
+                if (forms[i].offsetParent !== null) {
+                    target = forms[i];
+                    break;
+                }
+            }
+
+            if (!target) { target = document.querySelector('.settings-body form[method="post"]'); }
+
+            if (target) {
+                target.submit();
             }
         }
 
@@ -881,6 +915,20 @@
                     if (result.ok && result.data && result.data.success) {
                         if (typeof showToast === 'function') {
                             showToast(result.data.message || 'Barangay Profile updated successfully!', 'success');
+                        }
+
+                        // Immediately mirror the saved profile in the top sidebar header so the
+                        // operator sees "Barangay <Name> <Municipality>, <Province> System" change
+                        // right away instead of waiting for a page reload. Any other page picks the
+                        // value up on its next render because _Layout reads BarangayProfile.Current
+                        // from the database on every request.
+                        var headerEl = document.getElementById('brandSubtitle');
+                        var profile = result.data && result.data.profile;
+                        if (headerEl) {
+                            headerEl.textContent = 'Barangay ' +
+                                (profile && profile.barangayName ? profile.barangayName : payload.barangayName) + ' ' +
+                                (profile && profile.municipality ? profile.municipality : payload.municipality) + ', ' +
+                                (profile && profile.province ? profile.province : payload.province) + ' System';
                         }
                     } else {
                         var message = (result.data && result.data.message)

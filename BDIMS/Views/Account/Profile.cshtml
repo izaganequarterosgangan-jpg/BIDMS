@@ -52,7 +52,23 @@
 
             <!-- Profile avatar -->
             <div class="profile-identity">
-            <div class="profile-avatar" aria-hidden="true">@Model.Initials</div>
+            @* One fixed-size badge that shows the uploaded photo when there is one and
+               the initials otherwise. Both occupy the same 80px circle - the image
+               fills the existing box rather than adding a new one - so this row's
+               flex layout and spacing are identical either way. The circle crop is
+               handled by .avatar-photo-image in avatar.css (object-fit: cover). *@
+            <div class="profile-avatar" data-user-avatar aria-hidden="@(!string.IsNullOrEmpty(Model.PhotoUrl) ? "false" : "true")">
+                @if (!string.IsNullOrEmpty(Model.PhotoUrl))
+                {
+                    <img class="avatar-photo-image"
+                         src="@Model.PhotoUrl"
+                         alt="@Model.DisplayName" />
+                }
+                else
+                {
+                    @Model.Initials
+                }
+            </div>
 
             <div class="profile-identity-text">
                 <p class="profile-identity-name">@Model.DisplayName</p>
@@ -60,13 +76,39 @@
                 <p class="profile-identity-email">@Model.Email</p>
             </div>
 
-            @* No upload endpoint exists, so the control is inert and says so rather
-               than silently doing nothing when clicked. *@
-            <button type="button" class="profile-photo-btn" disabled
-                    title="Photo upload is not available yet">
-                <i class="bi bi-camera"></i> Change Photo
+            @* Opens the picker; the upload itself runs in the script at the foot of this
+               page. The input carries the `hidden` attribute rather than
+               display:none, which is what lets the button drive it: a display:none
+               input cannot be reached by .click() in every browser, and `hidden` can.
+               The button below is its accessible control. *@
+            <input type="file"
+                   id="profilePhotoInput"
+                   name="photo"
+                   class="profile-photo-input"
+                   accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+                   aria-label="Choose a profile photo"
+                   hidden />
+
+            <button type="button"
+                    class="profile-photo-btn"
+                    id="profilePhotoBtn"
+                    data-max-bytes="@BDIMS.Services.ProfilePhotoStore.MaxBytes"
+                    data-upload-url="@Url.Action("ChangePhoto", "Account")"
+                    title="Upload a new profile photo">
+                <i class="bi bi-camera"></i> <span id="profilePhotoBtnLabel">Change Photo</span>
             </button>
             </div>
+
+            @* Live region for upload progress and refusals. Deliberately placed OUTSIDE
+               .profile-identity: that element is a flex row, so any extra child here
+               would take a share of its width and shift the avatar, the name and the
+               button. As a block-level sibling it collapses to nothing while empty, so
+               the row above keeps its original geometry in the common case. *@
+            <p class="profile-photo-status"
+               id="profilePhotoStatus"
+               role="status"
+               aria-live="polite"
+               hidden></p>
 
             <!-- Information fields -->
             <div class="profile-section">
@@ -160,3 +202,168 @@
         </div>
     </form>
 </div>
+
+@section Scripts {
+    <script>
+        // Change Photo upload.
+        //
+        // Self-contained rather than added to site.js, because the behaviour only makes
+        // sense on this page. Scoped entirely to the ids above, so nothing here can
+        // affect the profile form's own submit or any other page.
+        (function () {
+            'use strict';
+
+            var button = document.getElementById('profilePhotoBtn');
+            var input = document.getElementById('profilePhotoInput');
+            var status = document.getElementById('profilePhotoStatus');
+            var label = document.getElementById('profilePhotoBtnLabel');
+
+            if (!button || !input || !status) {
+                return;
+            }
+
+            var DEFAULT_LABEL = label ? label.textContent : 'Change Photo';
+
+            // Kept in step with ProfilePhotoStore.MaxBytes on the server, which is the
+            // value actually enforced; this copy only saves the operator a round trip
+            // for a file that is obviously too large to send.
+            var maxBytes = parseInt(button.getAttribute('data-max-bytes'), 10) || (5 * 1024 * 1024);
+
+            var ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'];
+            var ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+
+            function antiforgeryToken() {
+                var meta = document.querySelector('meta[name="csrf-token"]');
+                var field = document.querySelector('input[name="__RequestVerificationToken"]');
+                return (field && field.value) || (meta && meta.getAttribute('content')) || '';
+            }
+
+            function say(message, isError) {
+                status.classList.remove('profile-photo-status-error');
+                status.classList.remove('profile-photo-status-success');
+
+                if (!message) {
+                    status.hidden = true;
+                    status.textContent = '';
+                    return;
+                }
+
+                status.hidden = false;
+                status.textContent = message;
+                status.classList.add(isError
+                    ? 'profile-photo-status-error'
+                    : 'profile-photo-status-success');
+            }
+
+            function setBusy(isBusy) {
+                // aria-busy plus a disabled button stops a second pick from being sent
+                // while the first is still in flight. The visual dimming is keyed off
+                // the same attribute in avatar.css.
+                button.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+                button.disabled = isBusy;
+
+                if (label) {
+                    label.textContent = isBusy ? 'Uploading...' : DEFAULT_LABEL;
+                }
+            }
+// Every avatar on the page (this card, the sidebar footer badge and the top
+            // header badge) is refreshed from the same response, so a successful upload
+            // is visible everywhere at once rather than only in the card. Each badge
+            // keeps its own class and dimensions, so swapping its contents changes the
+            // picture and nothing about the surrounding layout.
+            function applyPhoto(url, altText) {
+                document.querySelectorAll('[data-user-avatar]').forEach(function (badge) {
+                    badge.textContent = '';
+                    badge.removeAttribute('aria-hidden');
+
+                    var img = document.createElement('img');
+                    img.className = 'avatar-photo-image';
+                    img.src = url;
+                    img.alt = altText || '';
+                    badge.appendChild(img);
+                });
+            }
+
+            button.addEventListener('click', function () {
+                input.click();
+            });
+
+            input.addEventListener('change', function () {
+                var file = input.files && input.files[0];
+
+                if (!file) {
+                    return;
+                }
+
+                // Reset first: picking the same file twice in a row would not otherwise
+                // fire another change event.
+                input.value = '';
+
+                var dot = file.name.lastIndexOf('.');
+                var extension = dot >= 0 ? file.name.substring(dot).toLowerCase() : '';
+
+                if (ALLOWED_EXTENSIONS.indexOf(extension) === -1) {
+                    say('Please choose a .png, .jpg, .jpeg or .webp image file.', true);
+                    return;
+                }
+
+                if (file.type && ALLOWED_TYPES.indexOf(file.type.toLowerCase()) === -1) {
+                    say('That file is not an image. Please choose an image file.', true);
+                    return;
+                }
+
+                if (file.size > maxBytes) {
+                    say('That photo is larger than 5 MB. Please choose a smaller image.', true);
+                    return;
+                }
+
+                var form = new FormData();
+                form.append('photo', file);
+
+                setBusy(true);
+                say('Uploading your photo...', false);
+
+                fetch(button.getAttribute('data-upload-url'), {
+                    method: 'POST',
+                    // Sent as a header rather than a form field: the body here is
+                    // FormData, and a hidden token field cannot be added to it from
+                    // script. Program.cs binds this header name to the antiforgery token.
+                    headers: {
+                        'RequestVerificationToken': antiforgeryToken(),
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: form
+                })
+                    .then(function (response) {
+                        // A 200 carrying success:false is a refused upload (wrong
+                        // format, too large); a non-200 means the session or the route
+                        // failed. Both are reported, neither is swallowed.
+                        return response.json()
+                            .catch(function () {
+                                return {
+                                    success: false,
+                                    error: response.ok
+                                        ? 'The server returned an unexpected response.'
+                                        : 'Upload failed (HTTP ' + response.status + '). Please try again.'
+                                };
+                            });
+                    })
+                    .then(function (payload) {
+                        if (!payload || !payload.success) {
+                            say((payload && payload.error) || 'Upload failed. Please try again.', true);
+                            return;
+                        }
+
+                        applyPhoto(payload.url, '');
+                        say('Profile photo updated successfully.', false);
+                    })
+                    .catch(function () {
+                        say('Upload failed. Please check your connection and try again.', true);
+                    })
+                    .then(function () {
+                        setBusy(false);
+                    });
+            });
+        })();
+    </script>
+}

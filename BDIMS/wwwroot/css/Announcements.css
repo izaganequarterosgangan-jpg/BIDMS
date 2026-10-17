@@ -141,64 +141,78 @@
     }
 }
 
-/* Row delete control --------------------------------------------------------
-   Both the server-rendered rows and rows added live over AJAX use .delete-btn.
-   Nothing styled it, so it fell back to the browser's default grey button and
-   broke the look of the action column. These rules reproduce exactly the inline
-   styling site.js used to hard-code on its own delete button. */
-.action-buttons {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.delete-btn {
+/* Row action controls -------------------------------------------------------
+   Icon-only outline buttons matching the shared Certificates/Blotter design
+   language (.icon-btn-case + .icon-edit/.icon-delete): same 30x30 geometry,
+   flex centering, 8px radius and 1px outline. Edit wears the amber outline
+   (#b45309), Delete the red outline (#dc2626). Scoped under .ann-actions /
+   .ann-action-cell so stat cards, header, search and sidebar are untouched.
+   Both the server-rendered rows and rows added live over AJAX use these
+   classes. */
+.action-buttons,
+.ann-actions {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    background: none;
-    border: none;
-    padding: 0;
-    color: #ef4444;
-    font-size: 0.8125rem;
-    line-height: 1;
-    cursor: pointer;
+    white-space: nowrap;
 }
 
-.delete-btn:hover {
-    color: #b91c1c;
+.ann-action-cell {
+    white-space: nowrap;
+    text-align: center;
 }
 
-.delete-btn svg {
-    width: 16px;
-    height: 16px;
-}
-
-/* Row edit control --------------------------------------------------------
-   Deliberately an exact structural copy of .delete-btn above -- same flex
-   layout, same icon sizing, same font -- so adding the second control in the
-   ACTION column does not change the height or alignment of the row. Only the
-   colour differs: the destructive red is kept for Delete, and Edit wears the
-   same navy (#0b194c) the .action-button primary uses elsewhere in the app. */
-.edit-btn {
+.ann-actions .icon-btn-case {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    background: none;
-    border: none;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
     padding: 0;
-    color: #0b194c;
-    font-size: 0.8125rem;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 15px;
     line-height: 1;
     cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.edit-btn:hover {
-    color: #152766;
+.ann-actions .icon-btn-case i,
+.ann-actions .icon-btn-case svg {
+    width: 15px;
+    height: 15px;
+    font-size: 15px;
+    line-height: 1;
 }
 
-.edit-btn svg {
-    width: 16px;
-    height: 16px;
+.ann-actions .icon-edit {
+    color: #b45309;
+    border: 1px solid #fcd34d;
+}
+
+.ann-actions .icon-edit:hover {
+    background: #fef3c7;
+    border-color: #fbbf24;
+    color: #b45309;
+}
+
+.ann-actions .icon-delete {
+    color: #dc2626;
+    border: 1px solid #fecaca;
+}
+
+.ann-actions .icon-delete:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #dc2626;
+}
+
+/* The delete control nests inside a plain inline form; keep the form out of
+   the layout so the two icons sit side-by-side with the same 6px gap. */
+.ann-actions form[data-delete-form] {
+    display: inline-flex;
+    margin: 0;
+    padding: 0;
 }
 

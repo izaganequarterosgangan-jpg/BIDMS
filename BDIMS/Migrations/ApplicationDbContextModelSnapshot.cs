@@ -451,6 +451,10 @@ namespace BDIMS.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("ProfilePhoto")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(128)

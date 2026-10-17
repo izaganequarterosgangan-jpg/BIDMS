@@ -167,8 +167,39 @@
     background-color: var(--color-border-subtle, #f1f5f9);
     border: 1px solid var(--color-border, #e2e8f0);
     border-radius: var(--radius-sm, 6px);
-    cursor: not-allowed;
-    opacity: 0.6;
+
+    /* The control is live now that /Account/ChangePhoto exists, so it behaves like a
+       normal button. The disabled cursor/opacity are kept only for the in-flight
+       state, which avatar.css keys off [aria-busy="true"] while a file is uploading. */
+    cursor: pointer;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.profile-photo-btn:hover {
+    background-color: var(--color-border, #e2e8f0);
+}
+
+/* Upload feedback. Sits below the identity row rather than inside it: .profile-identity
+   is a flex row, and a third visible child there would steal width from the avatar and
+   the name. As a sibling it takes no space until it has a message to show. */
+.profile-photo-status {
+    margin: 12px 0 0;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.profile-photo-status[hidden] {
+    /* The attribute already removes it from the layout; this keeps the rule explicit
+       so a future display change cannot make the empty element reserve space. */
+    display: none;
+}
+
+.profile-photo-status-error {
+    color: #dc2626;
+}
+
+.profile-photo-status-success {
+    color: var(--color-status-ready-text, #059669);
 }
 /* --- Field grids --------------------------------------------------------
    minmax(0, 1fr) rather than a bare 1fr: without the 0 minimum a long value

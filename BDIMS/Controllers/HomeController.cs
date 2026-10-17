@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -31,11 +32,16 @@ namespace BDIMS.Controllers
     {
         private readonly ApplicationDbContext _db;
         private readonly BarangayProfileProvider _barangayProfile;
+        private readonly BDIMS.Services.SystemSettingsProvider _systemSettings;
 
-        public HomeController(ApplicationDbContext db, BarangayProfileProvider barangayProfile)
+        public HomeController(
+            ApplicationDbContext db,
+            BarangayProfileProvider barangayProfile,
+            BDIMS.Services.SystemSettingsProvider systemSettings)
         {
             _db = db;
             _barangayProfile = barangayProfile;
+            _systemSettings = systemSettings;
         }
 
         // Every module reads its rows from MySQL through these accessors, so the data
@@ -861,6 +867,15 @@ namespace BDIMS.Controllers
                 Purpose = string.IsNullOrWhiteSpace(purpose) ? "N/A" : purpose
             };
 
+            // Auto-Approve Low Risk Requests: a new incoming non-blotter request
+            // that is still Pending is approved as it is created. Blotter entries
+            // never reach this endpoint, and an explicitly submitted status is
+            // left alone so a clerk can still file one straight into review.
+            if (_systemSettings.AutoApproveLowRisk && newReq.Status == "Pending")
+            {
+                newReq.Status = "Approved";
+            }
+
             // Optional supporting attachment (Valid ID, Cedula, Proof of Residency, etc.)
             if (attachment != null && attachment.Length > 0)
             {
@@ -1439,6 +1454,83 @@ private static readonly string[] BlotterResolvedStatuses =
 
 
         // ============================================================
+        // UPDATE REPORT
+        // ============================================================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult UpdateReport(
+            int id,
+            string title,
+            string date,
+            string status)
+        {
+            if (id <= 0) return BadRequest();
+
+            var report = reportList.FirstOrDefault(r => r.Id == id);
+
+            if (report == null)
+            {
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                {
+                    return Json(new { success = false, id, message = "Report not found." });
+                }
+
+                TempData["Error"] = "That report no longer exists.";
+                return RedirectToAction("Reports");
+            }
+
+            DateTime parsedDate;
+
+            // The id is never taken from the form, so a report keeps its identity
+            // across an edit. Only the three editable fields are touched.
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                report.Title = title.Trim();
+            }
+
+            // Stored in the same "MMM d, yyyy" shape AddReport writes, so the row
+            // and the search index keep the format they already had.
+            if (DateTime.TryParse(date, out parsedDate))
+            {
+                report.Date = parsedDate.ToString("MMM d, yyyy");
+            }
+
+            report.Status = string.IsNullOrWhiteSpace(status)
+                ? report.Status
+                : status;
+
+            _db.SaveChanges();
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return Json(new
+                {
+                    success = true,
+                    item = new
+                    {
+                        id = report.Id,
+                        title = report.Title,
+                        date = report.Date,
+                        status = report.Status,
+                        statusClass = report.Status.ToLower().Replace(" ", "-")
+                    },
+                    preparedCount =
+                        reportList.Count(r =>
+                            r.Status == "Prepared" ||
+                            r.Status == "Ready"),
+                    pendingCount =
+                        reportList.Count(r => r.Status == "Pending Review"),
+                    totalCount = reportList.Count
+                });
+            }
+
+            TempData["Success"] = "Report updated.";
+            return RedirectToAction("Reports");
+        }
+
+
+        // ============================================================
         // CREATE BLOTTER
         // ============================================================
 
@@ -1829,6 +1921,86 @@ private static readonly string[] BlotterResolvedStatuses =
             }
 
             TempData["Success"] = "Certificate deleted.";
+            return RedirectToAction("Certificates");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult UpdateCertificate(
+            string id,
+            string resident,
+            string residentAge,
+            string purok,
+            string address,
+            string title,
+            string purpose,
+            string issueDate)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return BadRequest();
+
+            var item = certificateList.FirstOrDefault(c => c.Id == id);
+            if (item == null)
+            {
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                {
+                    return Json(new { success = false, id, message = "Certificate not found." });
+                }
+
+                TempData["Error"] = "That certificate no longer exists.";
+                return RedirectToAction("Certificates");
+            }
+
+            // The control number (Id) and Status are never touched here, so the
+            // record keeps its identity and its place in the pickup/printed counts.
+            if (!string.IsNullOrWhiteSpace(resident))
+            {
+                item.Resident = resident.Trim();
+            }
+            item.ResidentAge = residentAge?.Trim() ?? string.Empty;
+            item.Purok = purok?.Trim() ?? string.Empty;
+            item.Address = address?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                item.Title = title.Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(purpose))
+            {
+                item.Purpose = purpose.Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(issueDate) &&
+                DateTime.TryParse(issueDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            {
+                item.IssueDate = parsed.Date;
+                item.Issued = parsed.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
+            }
+
+            _db.SaveChanges();
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return Json(new
+                {
+                    success = true,
+                    item = new
+                    {
+                        id = item.Id,
+                        title = item.Title,
+                        resident = item.Resident,
+                        residentAge = item.ResidentAge,
+                        purok = item.Purok,
+                        address = item.Address,
+                        purpose = item.Purpose,
+                        issued = item.IssuedDateDisplay,
+                        issuedate = item.IssueDate?.ToString("yyyy-MM-dd") ?? string.Empty,
+                        status = item.Status
+                    },
+                    issuedThisWeekCount = certificateList.Count(c => c.IssueDate.HasValue && c.IssueDate.Value.Date >= DateTime.Today.AddDays(-7)),
+                    awaitingPickupCount = certificateList.Count(c => c.Status == "Ready"),
+                    printedCount = certificateList.Count(c => c.Status == "Printed")
+                });
+            }
+
+            TempData["Success"] = "Certificate updated.";
             return RedirectToAction("Certificates");
         }
 
@@ -3023,6 +3195,17 @@ private static readonly string[] BlotterResolvedStatuses =
             {
                 ActiveTab = tab,
 
+                // Pre-fill the System & Security toggles and dropdowns from the
+                // persisted preferences, so reopening the tab shows what is
+                // actually in force rather than the hard-coded defaults.
+                AutoApproveLowRisk = _systemSettings.Current.AutoApproveLowRisk,
+                EmailNotifications = _systemSettings.Current.EmailNotifications,
+                SmsNotifications = _systemSettings.Current.SmsNotifications,
+                TwoFactorAuth = _systemSettings.Current.TwoFactorAuth,
+                SessionTimeout = _systemSettings.Current.SessionTimeout,
+                AuditLogging = _systemSettings.Current.AuditLogging,
+                PasswordPolicy = _systemSettings.Current.PasswordPolicy,
+
                 // Pre-fill the Barangay Info form from the persisted profile so the
                 // page always matches the values certificates actually print.
                 BarangayName = CurrentBarangayName,
@@ -3093,6 +3276,53 @@ private static readonly string[] BlotterResolvedStatuses =
 
                     return RedirectToAction("Settings", new { tab = "general" });
                 }
+            }
+
+            // Persist the System & Security preferences. The tab-level "Save
+            // Changes" button posts the whole security form here, so without this
+            // branch the toggles would snap back to their previous values and the
+            // save would report a success that never happened.
+            if (model.ActiveTab == "security")
+            {
+                // The System Preferences card now only exposes SMS Notifications and
+                // System Audit Logging, and the Security card only Session Timeout and
+                // Password Policy. The removed controls (Auto-Approve, Email
+                // Notifications, Two-Factor Authentication) are not posted by the form
+                // any more, so their values are read from the persisted settings rather
+                // than from the model. Taking them from the model would reset every one
+                // of them to its default on save - and Auto-Approve Low Risk drives the
+                // document-approval path, so that reset would silently change how
+                // requests are handled. Reading Current keeps the last saved value in
+                // force.
+                var current = _systemSettings.Current;
+
+                var securityResult = _systemSettings.Save(new SystemSettingsOptions
+                {
+                    AutoApproveLowRisk = current.AutoApproveLowRisk,
+                    EmailNotifications = current.EmailNotifications,
+                    TwoFactorAuth = current.TwoFactorAuth,
+
+                    // Still editable on the System Preferences card.
+                    SmsNotifications = model.SmsNotifications,
+                    AuditLogging = model.AuditLogging,
+
+                    // Still editable on the Security card.
+                    SessionTimeout = model.SessionTimeout,
+                    PasswordPolicy = model.PasswordPolicy
+                });
+
+                if (!securityResult.Success)
+                {
+                    // Nothing else was written on this tab, so the page can return
+                    // with the reason rather than a misleading confirmation.
+                    TempData["ErrorMessage"] = securityResult.Message;
+
+                    return RedirectToAction("Settings", new { tab = "security" });
+                }
+
+                TempData["SuccessMessage"] = securityResult.Message;
+
+                return RedirectToAction("Settings", new { tab = "security" });
             }
 
             // Temporary success message
@@ -3169,6 +3399,181 @@ private static readonly string[] BlotterResolvedStatuses =
                     tab = model.ActiveTab
                 }
             );
+        }
+
+
+        // ============================================================
+        // DATABASE BACKUP
+        // ============================================================
+
+        /// <summary>
+        /// Streams a self-contained MySQL snapshot of the local database as a .sql
+        /// file, backing up resident records, blotter cases, certificates, logs and
+        /// every other table the barangay relies on.
+        ///
+        /// The dump is produced through EF Core rather than by shelling out to the
+        /// <c>mysqldump</c> binary: the deployment runs MySQL on a non-standard port
+        /// and the tool is not guaranteed to be on the server's PATH, whereas the
+        /// model already knows every table, column and row. The result is a portable
+        /// script - foreign-key checks disabled, the schema re-emitted from the model,
+        /// then an INSERT per row - that can be replayed into a fresh database.
+        /// </summary>
+        [HttpGet]
+        public IActionResult DownloadDatabaseBackup()
+        {
+            var sql = BuildDatabaseBackupSql();
+
+            var fileName = $"bdims-backup-{DateTime.Now:yyyyMMdd-HHmmss}.sql";
+            var bytes = Encoding.UTF8.GetBytes(sql);
+
+            return File(bytes, "application/sql", fileName);
+        }
+
+        /// <summary>
+        /// Builds the .sql text for <see cref="DownloadDatabaseBackup"/>. Kept
+        /// separate so the streaming action stays a thin wrapper and the SQL can be
+        /// reasoned about on its own.
+        /// </summary>
+        private string BuildDatabaseBackupSql()
+        {
+            string databaseName;
+            try
+            {
+                databaseName = _db.Database.GetDbConnection().Database;
+            }
+            catch
+            {
+                // The connection name is only cosmetic (it appears in the file
+                // header); a failure to read it must not abort the backup.
+                databaseName = "bdims_db";
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("-- ============================================");
+            sb.AppendLine("-- BDIMS Database Backup");
+            sb.AppendLine($"-- Database: {databaseName}");
+            sb.AppendLine($"-- Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine("-- ============================================");
+            sb.AppendLine();
+            sb.AppendLine("SET FOREIGN_KEY_CHECKS=0;");
+            sb.AppendLine("SET NAMES utf8mb4;");
+            sb.AppendLine();
+
+            // Schema first, so the script can recreate the tables on a fresh server
+            // before the data is inserted. A provider that cannot emit a script still
+            // leaves the data section intact below.
+            try
+            {
+                var schema = _db.Database.GenerateCreateScript();
+                if (!string.IsNullOrWhiteSpace(schema))
+                {
+                    sb.AppendLine(schema);
+                    sb.AppendLine();
+                }
+            }
+            catch
+            {
+                sb.AppendLine("-- (Schema script unavailable; data-only backup.)");
+                sb.AppendLine();
+            }
+
+            AppendDataInserts(sb);
+
+            sb.AppendLine();
+            sb.AppendLine("SET FOREIGN_KEY_CHECKS=1;");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Appends one INSERT statement per row for every table in the model. A table
+        /// with no rows simply contributes nothing, and the rows are read through the
+        /// model so this stays in step with the schema automatically.
+        /// </summary>
+        private void AppendDataInserts(StringBuilder sb)
+        {
+            foreach (var entityType in _db.Model.GetEntityTypes())
+            {
+                var tableName = entityType.GetTableName();
+                if (string.IsNullOrEmpty(tableName))
+                {
+                    continue;
+                }
+
+                // Scalar columns only. Navigations are relationships, not columns, and
+                // a shadow property has no CLR accessor to read a value from.
+                var columns = entityType.GetProperties()
+                    .Where(p => p.PropertyInfo != null && !string.IsNullOrEmpty(p.GetColumnName()))
+                    .ToList();
+
+                if (columns.Count == 0)
+                {
+                    continue;
+                }
+
+                var columnList = string.Join(", ", columns.Select(c => "`" + c.GetColumnName() + "`"));
+
+                // DbContext.Set is generic, so the strongly typed Set<ClrType>() is
+                // resolved by reflection and invoked for this entity's CLR type. The
+                // result is enumerated as a plain IEnumerable; each element is an
+                // entity instance whose values are read back out through the same
+                // property accessors used to map the columns.
+                var setMethod = typeof(Microsoft.EntityFrameworkCore.DbContext)
+                    .GetMethods()
+                    .Single(m => m.IsGenericMethodDefinition
+                        && m.Name == nameof(Microsoft.EntityFrameworkCore.DbContext.Set)
+                        && m.GetParameters().Length == 0);
+
+                var rows = (System.Collections.IEnumerable)setMethod
+                    .MakeGenericMethod(entityType.ClrType)
+                    .Invoke(_db, null)!;
+
+                foreach (var row in rows)
+                {
+                    var values = columns
+                        .Select(c => SqlLiteral(c.PropertyInfo!.GetValue(row)))
+                        .ToList();
+
+                    sb.Append("INSERT INTO `").Append(tableName).Append("` (")
+                      .Append(columnList).Append(") VALUES (")
+                      .Append(string.Join(", ", values)).AppendLine(");");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Formats a CLR value as a MySQL literal for the backup INSERT statements.
+        /// Booleans become 1/0 (MySQL has no native boolean), dates use the
+        /// unambiguous <c>yyyy-MM-dd HH:mm:ss</c> form, and strings are escaped so an
+        /// apostrophe or backslash in resident data cannot break the statement.
+        /// </summary>
+        private static string SqlLiteral(object? value)
+        {
+            switch (value)
+            {
+                case null:
+                    return "NULL";
+                case bool flag:
+                    return flag ? "1" : "0";
+                case string text:
+                    return "'" + text
+                        .Replace("\\", "\\\\")
+                        .Replace("'", "\\'")
+                        .Replace("\r", "\\r")
+                        .Replace("\n", "\\n") + "'";
+                case DateTime dateTime:
+                    return "'" + dateTime.ToString("yyyy-MM-dd HH:mm:ss") + "'";
+                case DateTimeOffset offset:
+                    return "'" + offset.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") + "'";
+                case byte[] bytes:
+                    return "0x" + Convert.ToHexString(bytes);
+                case IFormattable formattable:
+                    return formattable.ToString(null, CultureInfo.InvariantCulture);
+                default:
+                    return "'" + value.ToString()!
+                        .Replace("\\", "\\\\")
+                        .Replace("'", "\\'") + "'";
+            }
         }
 
 

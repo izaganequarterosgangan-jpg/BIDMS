@@ -342,42 +342,11 @@ document.addEventListener('DOMContentLoaded', function () {
             item.getAttribute('data-related-url'));
     });
 
-    document.addEventListener('click', function (ev) {
-        var del = ev.target.closest('.announcement-delete-btn');
-        if (!del) return;
-        ev.preventDefault();
-        if (!confirm('Delete this announcement?')) return;
-        var id = del.getAttribute('data-id');
-        fetch('/Home/DeleteAnnouncement', {
-            method: 'POST',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'RequestVerificationToken': getAntiforgeryToken()
-            },
-            body: 'id=' + encodeURIComponent(id)
-        })
-        // fetch resolves on 4xx and 5xx too, so without checking ok an antiforgery
-        // rejection or a server error still navigated to the list and the row was
-        // still there with no error shown and .catch never reached.
-        .then(function (response) {
-            if (!response.ok) {
-                throw new Error('Delete failed with status ' + response.status);
-            }
-            return response.json().catch(function () { return {}; });
-        })
-        .then(function (result) {
-            if (result && result.success === false) {
-                showToast(result.message || 'Announcement was not found.', 'warning');
-                return;
-            }
-            window.location = '/Home/Announcements';
-        })
-        .catch(function (err) {
-            console.error(err);
-            showToast('Unable to delete announcement.', 'danger');
-        });
-    });
+    // Announcement row delete is handled in Announcements.cshtml, which owns the
+    // in-place row removal and the summary-card counts. The handler that used to
+    // live here targeted a .announcement-delete-btn class that no longer exists
+    // anywhere, and it answered by reloading the whole page, so it was dead code
+    // and a hazard if a matching class ever returned.
 });
 
 // lucide replaces each <i data-lucide="..."> with an inline <svg> exactly once. Rows
@@ -453,17 +422,20 @@ document.addEventListener('DOMContentLoaded', function () {
                     "<td><span class=\"audience-badge\">" + escapeHtml(item.targetAudience) + "</span></td>" +
                     "<td class=\"post-date\">" + escapeHtml(item.date) + "</td>" +
                     "<td><span class=\"priority-tag priority-" + escapeHtml(String(item.priority || '').toLowerCase()) + "\">" + escapeHtml(item.priority) + "</span></td>" +
-                    "<td><button type=\"button\" class=\"announcement-delete-btn\" data-id=\"" + escapeHtml(item.id) + "\" " +
-                    "style=\"background:none; border:none; color:#ef4444; cursor:pointer;\" title=\"Delete\">" +
-                    "<i data-lucide=\"trash-2\" style=\"width:16px; height:16px;\"></i></button></td>";
+                    // Icon-only, same .ann-actions/.icon-btn-case outline styling
+                    // as the server-rendered rows in Announcements.cshtml, so a row
+                    // added through this path is indistinguishable from the rest.
+                    "<td class=\"ann-action-cell\"><div class=\"action-buttons ann-actions\">" +
+                    "<button type=\"button\" class=\"icon-btn-case icon-edit\" title=\"Edit\" aria-label=\"Edit announcement\" data-edit-id=\"" + escapeHtml(item.id) + "\"><i class=\"bi bi-pencil\"></i></button>" +
+                    "<button type=\"button\" class=\"icon-btn-case icon-delete\" title=\"Delete\" aria-label=\"Delete announcement\" data-delete-id=\"" + escapeHtml(item.id) + "\"><i class=\"bi bi-trash\"></i></button>" +
+                    "</div></td>";
 
                 // prepend new row
                 if (tbody.firstChild) tbody.insertBefore(tr, tbody.firstChild);
                 else tbody.appendChild(tr);
 
-                // The new row's <i data-lucide> placeholder only becomes an icon when
-                // createIcons() runs again; otherwise its delete button is a blank box.
-                refreshIcons();
+                // New rows use inline <i class="bi"> icons (Bootstrap Icons load with
+                // the layout), so no lucide refresh pass is needed here.
             }
 
             // close modal

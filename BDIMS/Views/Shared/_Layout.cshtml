@@ -7,6 +7,11 @@
     var currentUserName = BDIMS.Services.UserClaims.GetDisplayName(User);
     var currentUserRole = BDIMS.Services.UserClaims.GetRole(User);
     var currentUserInitials = BDIMS.Services.UserClaims.GetInitials(User);
+
+    // Null until the operator uploads a photo from My Profile. The badge below renders
+    // the image when it is present and falls back to the initials when it is not, so
+    // neither case needs a separate badge class or a different box size.
+    var currentUserPhotoUrl = BDIMS.Services.UserClaims.GetPhotoUrl(User);
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -22,6 +27,9 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/BDIMS.styles.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/documents.css" asp-append-version="true" />
+    <!-- Uploaded profile photos. App-wide because the same picture has to render in
+         the sidebar badge, the two header badges and the My Profile card. -->
+    <link rel="stylesheet" href="~/css/avatar.css" asp-append-version="true" />
 
     <style>
             :root {
@@ -553,7 +561,7 @@
                     </div>
                     <div>
                         <h1 class="brand-title">BIDMS</h1>
-                        <p class="brand-subtitle">Barangay @BarangayProfile.Current.BarangayName @BarangayProfile.Current.Municipality, @BarangayProfile.Current.Province System</p>
+                        <p class="brand-subtitle" id="brandSubtitle">Barangay @BarangayProfile.Current.BarangayName @BarangayProfile.Current.Municipality, @BarangayProfile.Current.Province System</p>
                     </div>
                 </div>
 
@@ -598,7 +606,18 @@
                    sidebar's fixed width intact - the anchor only supplies the hit area. *@
                 <a asp-controller="Account" asp-action="Profile" class="profile-badge-link sidebar-profile-link" title="My Profile">
                     <div class="user-profile">
-                        <div class="avatar-gold">@currentUserInitials</div>
+                        <div class="avatar-gold" data-user-avatar>
+                        @if (!string.IsNullOrEmpty(currentUserPhotoUrl))
+                        {
+                            <img class="avatar-photo-image"
+                                 src="@currentUserPhotoUrl"
+                                 alt="@currentUserName" />
+                        }
+                        else
+                        {
+                            @currentUserInitials
+                        }
+                        </div>
                         <div>
                             <p class="user-name">@currentUserName</p>
                             <p class="user-role">@currentUserRole</p>

@@ -1,3 +1,4 @@
+using System;
 using System.Security.Claims;
 using BDIMS.Models;
 
@@ -62,5 +63,35 @@ namespace BDIMS.Services
         /// <summary>Mobile number, or an empty string when the claim is absent.</summary>
         public static string GetContactNumber(ClaimsPrincipal? principal) =>
             principal?.FindFirst(UserAccount.ContactNumberClaim)?.Value ?? string.Empty;
+
+        /// <summary>
+        /// URL of the signed-in user's uploaded photo, or <c>null</c> when they have not
+        /// uploaded one (in which case the badges keep showing
+        /// <see cref="GetInitials"/>).
+        ///
+        /// The claim carries the stored file name; the route that serves it is applied
+        /// here so the four call sites - the profile card, the sidebar badge, the
+        /// dashboard header badge and the settings badge - cannot drift apart, exactly
+        /// as <see cref="GetInitials"/> already guarantees for the letters.
+        /// </summary>
+        public static string? GetPhotoUrl(ClaimsPrincipal? principal) =>
+            BuildPhotoUrl(principal?.FindFirst(UserAccount.ProfilePhotoClaim)?.Value);
+
+        /// <summary>
+        /// Route for a stored photo file name, or <c>null</c> when there is no photo.
+        ///
+        /// Split out from <see cref="GetPhotoUrl"/> so the My Profile page can build the
+        /// same URL straight from the account row it has just loaded, instead of relying
+        /// on a claim that may predate the current edit.
+        /// </summary>
+        public static string? BuildPhotoUrl(string? fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return null;
+            }
+
+            return $"/Account/ProfilePhoto?file={Uri.EscapeDataString(fileName)}";
+        }
     }
 }

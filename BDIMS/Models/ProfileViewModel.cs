@@ -61,6 +61,14 @@ namespace BDIMS.Models
         [BindNever]
         public string Initials { get; set; } = string.Empty;
 
+        /// <summary>
+        /// URL of the uploaded photo, or an empty string when the account has none and
+        /// the card should fall back to <see cref="Initials"/>. [BindNever] because the
+        /// upload is its own request and must never be settable from the form fields.
+        /// </summary>
+        [BindNever]
+        public string PhotoUrl { get; set; } = string.Empty;
+
         /// <summary>Name shown on the profile card, recomputed on save.</summary>
         [BindNever]
         public string DisplayName { get; set; } = string.Empty;
@@ -117,7 +125,11 @@ namespace BDIMS.Models
                 Email = account.Email ?? string.Empty,
                 Role = account.Role ?? string.Empty,
                 DisplayName = UserAccount.ComposeDisplayName(first, last, account.DisplayName),
-                Initials = account.ResolveInitials()
+                Initials = account.ResolveInitials(),
+
+                // Built from the row rather than from the claim, so the card shows the
+                // saved photo even if the cookie was issued before the upload.
+                PhotoUrl = BDIMS.Services.UserClaims.BuildPhotoUrl(account.ProfilePhoto) ?? string.Empty
             };
         }
     }

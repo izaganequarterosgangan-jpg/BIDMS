@@ -1,0 +1,64 @@
+/* Profile-photo avatar styling.
+
+   Loaded app-wide by _Layout.cshtml because the photo has to render identically in
+   four places: the My Profile header badge (.profile-avatar), the sidebar footer badge
+   (.avatar-gold), the top header badges (.header-avatar, .avatar-circle).
+
+   Every rule below is scoped to .avatar-photo-image, the class given ONLY to the
+   <img> that is swapped in when an account has an uploaded picture. Nothing here
+   restates a badge's width, height, margin or display, so the badges keep exactly the
+   box they had when they rendered initials: the image fills the badge it already
+   occupies rather than introducing a new box into the flex row, the header gap or the
+   sidebar's fixed width.
+
+   This matters most for the non-square photos people actually upload. Without
+   object-fit the image would be squashed to the badge's square (distorting faces) or
+   would overflow it (pushing the sidebar wider and the header taller). `cover` fills
+   the circle and crops the overflow, `center` keeps the crop centred on the subject
+   rather than trimming the top of the head off. */
+
+.avatar-photo-image {
+    /* Fills the badge exactly. `block` removes the inline-element baseline gap that
+       would otherwise add a few stray pixels under the image. */
+    display: block;
+    width: 100%;
+    height: 100%;
+
+    /* Distortion protection: scale the image to cover the square, then crop the
+       overflow rather than stretching it. */
+    object-fit: cover;
+    object-position: center;
+
+    /* Matches the border-radius of the badge containers it is dropped into
+       (50%), so the photo is circular even if a future badge is not. */
+    border-radius: 50%;
+
+    /* Never contributes intrinsic width to the surrounding flex/grid layout. Without
+       this, a 3000px-wide phone photo would set the badge's min-content floor and
+       stretch the sidebar. */
+    max-width: 100%;
+    flex: 0 0 auto;
+
+    /* The badge containers already size themselves; this only guards against a photo
+       edge bleeding a pixel past the circle on fractional-pixel layouts. */
+    overflow: hidden;
+}
+
+/* The badge that holds a photo needs to clip its own child. Every container that
+   receives an uploaded photo keeps its own width/height/radius, so this only adds the
+   clip - it deliberately sets no dimensions of its own. */
+.avatar-gold,
+.header-avatar,
+.avatar-circle,
+.profile-avatar {
+    overflow: hidden;
+}
+
+/* While an upload is in flight the button shows progress and refuses further clicks,
+   so a second pick cannot race the first onto the server. Scoped to the Profile page's
+   own button class; no other button in the app is affected. */
+.profile-photo-btn[aria-busy="true"] {
+    opacity: 0.6;
+    cursor: progress;
+    pointer-events: none;
+}

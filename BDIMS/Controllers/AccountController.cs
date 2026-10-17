@@ -1,5 +1,7 @@
 using BDIMS.Data;
 using BDIMS.Models;
+using BDIMS.Services;
+using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -141,6 +143,13 @@ namespace BDIMS.Controllers
                 new(UserAccount.RoleClaim, account.Role ?? string.Empty),
                 new(UserAccount.InitialsClaim, initials),
 
+                // Empty when no photo has been uploaded. Carried so the badges can
+                // decide between the picture and the initials without a database read
+                // on every page load.
+                new(
+                    UserAccount.ProfilePhotoClaim,
+                    account.ProfilePhoto ?? string.Empty),
+
                 // Carried so a save can re-issue the cookie from one up-to-date row and
                 // every screen reads a consistent identity.
                 new(UserAccount.EmailClaim, account.Email ?? string.Empty),
@@ -242,6 +251,13 @@ namespace BDIMS.Controllers
 
             model.Id = account.Id;
 
+            // The upload is a separate request, so the photo never comes back through
+            // model binding. Carried onto the model here so a re-displayed form (after a
+            // validation failure, for instance) still shows the saved photo instead of
+            // silently reverting the badge to the initials.
+            model.PhotoUrl =
+                BDIMS.Services.UserClaims.BuildPhotoUrl(account.ProfilePhoto) ?? string.Empty;
+
             if (!ModelState.IsValid)
             {
                 return ViewWithDerivedValues(model);
@@ -291,10 +307,29 @@ namespace BDIMS.Controllers
 
             await _db.SaveChangesAsync();
 
-            // Re-issue the authentication cookie from the updated row. The layout renders
-            // the name, role and initials from claims, so without this the badges would
-            // keep showing the old values until the cookie expired - the "I saved but
-            // nothing changed" behaviour this refresh exists to prevent.
+            // Re-issue the authentication cookie from the updated row, so the sidebar,
+            // the header badges and this page's card all read the new name, role,
+            // initials and photo on the very next render.
+            await RefreshSignInAsync(account);
+
+            TempData["ProfileSuccess"] = model.IsChangingPassword
+                ? "Profile and password updated successfully."
+                : "Profile updated successfully.";
+
+            return RedirectToAction(nameof(Profile));
+        }
+
+        /// <summary>
+        /// Re-issues the authentication cookie from an up-to-date account row.
+        ///
+        /// The layout and the dashboard header render the name, role, initials and photo
+        /// from claims, so anything that changes the profile has to refresh the cookie
+        /// as part of the same request. Without it the badges keep showing the previous
+        /// values until the cookie expires, which is the "I saved but nothing changed"
+        /// behaviour this method exists to prevent.
+        /// </summary>
+        private async Task RefreshSignInAsync(UserAccount account)
+        {
             await HttpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 BuildPrincipal(account),
@@ -305,12 +340,164 @@ namespace BDIMS.Controllers
                     IsPersistent = Request.Cookies[
                         CookieAuthenticationDefaults.AuthenticationScheme] != null
                 });
+        }
 
-            TempData["ProfileSuccess"] = model.IsChangingPassword
-                ? "Profile and password updated successfully."
-                : "Profile updated successfully.";
+        /// <summary>
+        /// POST: /Account/ChangePhoto
+        ///
+        /// Stores the image picked on the My Profile page and returns JSON, because the
+        /// page uploads through <c>fetch</c> and updates the badges in place rather than
+        /// navigating away.
+        /// </summary>
+        /// <param name="photo">The uploaded image. Named to match the form field.</param>
+        /// <param name="cancellationToken">Aborts the copy when the client gives up.</param>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize]
+        [RequestSizeLimit(ProfilePhotoStore.MaxBytes + 65536)]
+        public async Task<IActionResult> ChangePhoto(
+            IFormFile? photo,
+            CancellationToken cancellationToken)
+        {
+            var id = GetCurrentUserId();
 
-            return RedirectToAction(nameof(Profile));
+            if (id is null)
+            {
+                // An expired cookie mid-upload: tell the client so it can send the
+                // operator to sign in again, rather than silently doing nothing.
+                return Json(new { success = false, error = "Your session has expired. Please sign in again." });
+            }
+
+            if (photo is null || photo.Length == 0)
+            {
+                return Json(new { success = false, error = "Please choose a photo to upload." });
+            }
+
+            if (photo.Length > ProfilePhotoStore.MaxBytes)
+            {
+                return Json(new
+                {
+                    success = false,
+                    error = "That photo is larger than 5 MB. Please choose a smaller image."
+                });
+            }
+
+            var account = await _db.UserAccounts
+                .SingleOrDefaultAsync(u => u.Id == id.Value, cancellationToken);
+
+            if (account is null)
+            {
+                await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return Json(new { success = false, error = "Your account is no longer available." });
+            }
+
+            var previousPhoto = account.ProfilePhoto;
+
+            var saved = await ProfilePhotoStore.SaveAsync(
+                account.Id,
+                photo.FileName,
+                photo.ContentType,
+                photo.OpenReadStream(),
+                cancellationToken);
+
+            if (!saved.Succeeded || saved.FileName is null)
+            {
+                return Json(new { success = false, error = saved.Error });
+            }
+
+            account.ProfilePhoto = saved.FileName;
+            await _db.SaveChangesAsync(cancellationToken);
+
+            // Only now that the new photo is safely stored is the old one removed, so a
+            // failed upload can never leave the account with no photo at all.
+            ProfilePhotoStore.TryDelete(previousPhoto);
+
+            // Re-issue the cookie so the new file name reaches the sidebar and header
+            // badges. Without this they would keep showing the previous photo until the
+            // cookie expired.
+            await RefreshSignInAsync(account);
+
+            // Built from the account just saved, not from User. The cookie re-issued above takes
+// effect on the *next* request, so reading the claim here would still return the
+// previous (or absent) photo name and the client would have no URL to render.
+return Json(new
+            {
+                success = true,
+                url = UserClaims.BuildPhotoUrl(account.ProfilePhoto),
+                initials = account.ResolveInitials()
+            });
+        }
+
+        /// <summary>
+        /// GET: /Account/ProfilePhoto?file=...
+        ///
+        /// Serves the signed-in user's own uploaded photo. Authorised and scoped to the
+        /// caller's own file, so one signed-in staff member cannot pull another's
+        /// photograph by guessing a file name - which is also why the images are stored
+        /// outside <c>wwwroot</c> rather than served as static files.
+        /// </summary>
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> ProfilePhoto(string? file)
+        {
+            var id = GetCurrentUserId();
+
+            if (id is null)
+            {
+                return NotFound();
+            }
+
+            // Tracked, not AsNoTracking: when the stored file turns out to be missing this
+            // action repairs the row rather than only reporting the problem.
+            var account = await _db.UserAccounts
+                .SingleOrDefaultAsync(u => u.Id == id.Value);
+
+            if (account is null)
+            {
+                return NotFound();
+            }
+
+            // Own photo only. The name is also re-validated by ResolvePath below, so
+            // neither a traversal attempt nor another user's file name can resolve.
+            if (string.IsNullOrWhiteSpace(file)
+                || !string.Equals(file, account.ProfilePhoto, StringComparison.Ordinal))
+            {
+                return NotFound();
+            }
+
+            // ResolvePath returns null both for a name this store never produced and for
+            // a well-formed name whose file has since disappeared; the two are handled
+            // the same way below, so the distinction does not matter here.
+            var path = ProfilePhotoStore.ResolvePath(file);
+
+            if (path is null)
+            {
+                // The row points at an image that is no longer there - a restored backup,
+                // a deployment that did not carry App_Data, or a deleted file. Left alone
+                // this leaves every badge on every page rendering a broken image, because
+                // the claim still carries the dead file name. Clearing it and re-issuing
+                // the cookie makes the badges fall back to the initials on the next
+                // render, which is the honest state: there is no photo to show.
+                await ClearMissingPhotoAsync(account);
+
+                return NotFound();
+            }
+
+            return PhysicalFile(
+                path,
+                ProfilePhotoStore.ContentTypeFor(file));
+        }
+
+        /// <summary>
+        /// Drops a photo reference whose file no longer exists and refreshes the sign-in
+        /// cookie, so the badges stop asking for an image that will never load.
+        /// </summary>
+        private async Task ClearMissingPhotoAsync(UserAccount account)
+        {
+            account.ProfilePhoto = null;
+
+            await _db.SaveChangesAsync();
+            await RefreshSignInAsync(account);
         }
 
         /// <summary>
