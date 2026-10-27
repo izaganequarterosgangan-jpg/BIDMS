@@ -18,6 +18,9 @@
             <i data-lucide="search" class="search-icon"></i>
             <input type="text" name="searchQuery" value="@Model.SearchQuery" placeholder="Search announcements..." onchange="this.form.submit()" />
         </form>
+        <button type="button" class="action-button" data-bs-toggle="modal" data-bs-target="#emergencyHotlineModal">
+            <i data-lucide="phone" class="search-icon"></i> Emergency Hotlines
+        </button>
         <button type="button" class="action-button" data-bs-toggle="modal" data-bs-target="#announcementModalBootstrap">
             <i data-lucide="plus" class="search-icon"></i> New Post
         </button>
@@ -61,6 +64,7 @@
                         <th>ANNOUNCEMENT TITLE</th>
                         <th>PURPOSE & DETAILS</th>
                         <th>TARGET AUDIENCE</th>
+                        <th>CATEGORY</th>
                         <th>DATE</th>
                         <th>PRIORITY</th>
                         <th>ACTION</th>
@@ -71,11 +75,14 @@
                     {
                         @foreach (var post in Model.Announcements)
                         {
-                            <tr>
+                            <tr data-schedule-time="@post.ScheduleTime" data-category="@post.Category">
                                 <td class="post-title">@post.Title</td>
                                 <td class="post-purpose">@post.Purpose</td>
                                 <td>
                                     <span class="audience-badge">@post.TargetAudience</span>
+                                </td>
+                                <td>
+                                    <span class="category-tag @post.Category.ToLower()">@post.Category</span>
                                 </td>
                                 <td class="post-date">@post.Date</td>
                                 <td>
@@ -153,16 +160,30 @@
                 </select>
             </div>
 
+            <div class="mb-3">
+                <label class="form-label">Category</label>
+                <select id="announcementCategory" name="category" class="form-select">
+                    <option value="General">General</option>
+                    <option value="Health">Health</option>
+                    <option value="Youth">Youth</option>
+                    <option value="Urgent">Urgent</option>
+                </select>
+            </div>
+
             <div class="row">
-                <div class="col-md-6 mb-3">
+                <div class="col-md-4 mb-3">
                     <label class="form-label">Schedule Date *</label>
-                    <input type="text" id="announcementDate" name="date" class="form-control" placeholder="e.g. Aug 20, 2026" required />
+                    <input type="date" id="announcementDate" name="date" class="form-control" required />
                 </div>
-                <div class="col-md-6 mb-3">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Schedule Time</label>
+                    <input type="time" id="announcementTime" name="scheduleTime" class="form-control" />
+                </div>
+                <div class="col-md-4 mb-3">
                     <label class="form-label">Priority Level</label>
                     <select id="announcementPriority" name="priority" class="form-select">
                         <option value="High">High</option>
-                        <option value="Medium">Medium</option>
+                        <option value="Medium" selected>Medium</option>
                         <option value="Low">Low</option>
                     </select>
                 </div>
@@ -171,6 +192,75 @@
             <div class="d-flex justify-content-end">
                 <button type="submit" class="btn btn-primary" id="announcementSubmitButton">Publish Announcement</button>
             </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Emergency Hotlines Modal -->
+<div class="modal fade" id="emergencyHotlineModal" tabindex="-1" aria-labelledby="emergencyHotlineModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="emergencyHotlineModalLabel">Emergency Hotlines</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span class="text-muted small">Manage barangay emergency contact numbers</span>
+          <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#emergencyHotlineFormModal" data-hotline-id="">
+            <i class="bi bi-plus"></i> Add Hotline
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 50px;">Order</th>
+                <th>Title</th>
+                <th>Phone Number</th>
+                <th style="width: 100px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="emergencyHotlinesTableBody">
+              <!-- Rows loaded via AJAX -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Emergency Hotline Form Modal (Create/Edit) -->
+<div class="modal fade" id="emergencyHotlineFormModal" tabindex="-1" aria-labelledby="emergencyHotlineFormModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="emergencyHotlineFormModalLabel">Add Emergency Hotline</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="emergencyHotlineForm" asp-controller="Home" asp-action="CreateEmergencyHotline" method="post">
+          @Html.AntiForgeryToken()
+          <input type="hidden" id="hotlineId" name="id" value="" />
+          <div class="mb-3">
+            <label class="form-label">Title *</label>
+            <input type="text" id="hotlineTitle" name="title" class="form-control" placeholder="e.g. Barangay Hall, Police Station, Fire / Rescue" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Phone Number *</label>
+            <input type="tel" id="hotlinePhone" name="phoneNumber" class="form-control" placeholder="e.g. 911, (038) 545-XXXX" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Display Order</label>
+            <input type="number" id="hotlineOrder" name="displayOrder" class="form-control" value="0" min="0" />
+            <div class="form-text">Lower numbers appear first.</div>
+          </div>
+          <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary" id="hotlineSubmitButton">Save Hotline</button>
+          </div>
         </form>
       </div>
     </div>
@@ -314,6 +404,7 @@
                 var titleInput = document.getElementById('announcementTitle');
                 var purposeInput = document.getElementById('announcementPurpose');
                 var audienceSelect = document.getElementById('announcementAudience');
+                var categorySelect = document.getElementById('announcementCategory');
                 var dateInput = document.getElementById('announcementDate');
                 var prioritySelect = document.getElementById('announcementPriority');
 
@@ -331,6 +422,12 @@
 
                 if (prioritySelect) {
                     setSelectValue(prioritySelect, (cells[4].textContent || '').trim().toLowerCase());
+                }
+
+                // Category is stored as a data attribute on the row
+                if (categorySelect) {
+                    var category = row.getAttribute('data-category') || 'General';
+                    setSelectValue(categorySelect, category);
                 }
 
                 return true;
@@ -478,10 +575,11 @@
                 // reported a failure for an announcement that was in fact saved.
                 var data = item || {};
 
-                return '<tr>' +
+                return '<tr data-schedule-time="' + escapeHtml(data.scheduleTime || '') + '" data-category="' + escapeHtml(data.category || 'General') + '">' +
                     '<td class="post-title">' + escapeHtml(data.title) + '</td>' +
                     '<td class="post-purpose">' + escapeHtml(data.purpose) + '</td>' +
                     '<td><span class="audience-badge">' + escapeHtml(data.targetAudience) + '</span></td>' +
+                    '<td><span class="category-tag ' + escapeHtml(String(data.category || 'General').toLowerCase()) + '">' + escapeHtml(data.category || 'General') + '</span></td>' +
                     '<td class="post-date">' + escapeHtml(data.date) + '</td>' +
                     '<td><span class="priority-tag priority-' + escapeHtml(String(data.priority || '').toLowerCase()) + '">' + escapeHtml(data.priority) + '</span></td>' +
                     '<td class="ann-action-cell"><div class="action-buttons ann-actions">' +
@@ -716,5 +814,189 @@
         // .modal-overlay with an .active class. The two helpers that targeted a
         // #announcementModal that does not exist were never called and would throw on
         // null, so they were removed rather than left as a trap.
+
+        // Emergency Hotlines management -----------------------------------------
+        (function () {
+            var hotlineModal = document.getElementById('emergencyHotlineModal');
+            var hotlineFormModal = document.getElementById('emergencyHotlineFormModal');
+            var hotlineForm = document.getElementById('emergencyHotlineForm');
+            var hotlineTableBody = document.getElementById('emergencyHotlinesTableBody');
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            var token = meta ? meta.getAttribute('content') : '';
+
+            function escapeHtml(value) {
+                return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+                    return { '&': '&', '<': '<', '>': '>', '"': '"', "'": ''' }[c];
+                });
+            }
+
+            function notify(message, type) {
+                if (typeof showToast === 'function') { showToast(message, type); }
+            }
+
+            function post(url, data) {
+                return fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'RequestVerificationToken': token
+                    },
+                    body: data
+                }).then(function (r) {
+                    if (!r.ok) { throw new Error('request failed'); }
+                    return r.json();
+                });
+            }
+
+            function encode(form) {
+                var data = new URLSearchParams();
+                new FormData(form).forEach(function (value, key) {
+                    data.append(key, value);
+                });
+                return data.toString();
+            }
+
+            function loadHotlines() {
+                fetch('/Home/GetEmergencyHotlines', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function (r) { return r.json(); })
+                    .then(function (result) {
+                        if (!result || !result.success) { return; }
+                        renderHotlines(result.hotlines);
+                    })
+                    .catch(function (err) { console.error(err); });
+            }
+
+            function renderHotlines(hotlines) {
+                if (!hotlineTableBody) { return; }
+                hotlineTableBody.innerHTML = '';
+                if (!hotlines || hotlines.length === 0) {
+                    hotlineTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No emergency hotlines configured.</td></tr>';
+                    return;
+                }
+                hotlines.forEach(function (h) {
+                    var tr = document.createElement('tr');
+                    tr.innerHTML =
+                        '<td>' + escapeHtml(h.displayOrder) + '</td>' +
+                        '<td>' + escapeHtml(h.title) + '</td>' +
+                        '<td>' + escapeHtml(h.phoneNumber) + '</td>' +
+                        '<td>' +
+                            '<button type="button" class="btn btn-sm btn-outline-primary edit-hotline" data-hotline-id="' + escapeHtml(h.id) + '" data-title="' + escapeHtml(h.title) + '" data-phone="' + escapeHtml(h.phoneNumber) + '" data-order="' + escapeHtml(h.displayOrder) + '" title="Edit"><i class="bi bi-pencil"></i></button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-danger delete-hotline ms-1" data-hotline-id="' + escapeHtml(h.id) + '" title="Delete"><i class="bi bi-trash"></i></button>' +
+                        '</td>';
+                    hotlineTableBody.appendChild(tr);
+                });
+            }
+
+            function resetHotlineForm() {
+                if (!hotlineForm) { return; }
+                var idField = document.getElementById('hotlineId');
+                var titleField = document.getElementById('hotlineTitle');
+                var phoneField = document.getElementById('hotlinePhone');
+                var orderField = document.getElementById('hotlineOrder');
+                var modalTitle = document.getElementById('emergencyHotlineFormModalLabel');
+                var submitBtn = document.getElementById('hotlineSubmitButton');
+
+                if (idField) { idField.value = ''; }
+                if (titleField) { titleField.value = ''; }
+                if (phoneField) { phoneField.value = ''; }
+                if (orderField) { orderField.value = '0'; }
+                hotlineForm.setAttribute('action', '/Home/CreateEmergencyHotline');
+                if (modalTitle) { modalTitle.textContent = 'Add Emergency Hotline'; }
+                if (submitBtn) { submitBtn.textContent = 'Save Hotline'; }
+            }
+
+            function fillHotlineForm(h) {
+                var idField = document.getElementById('hotlineId');
+                var titleField = document.getElementById('hotlineTitle');
+                var phoneField = document.getElementById('hotlinePhone');
+                var orderField = document.getElementById('hotlineOrder');
+                var modalTitle = document.getElementById('emergencyHotlineFormModalLabel');
+                var submitBtn = document.getElementById('hotlineSubmitButton');
+
+                if (idField) { idField.value = h.id; }
+                if (titleField) { titleField.value = h.title; }
+                if (phoneField) { phoneField.value = h.phone; }
+                if (orderField) { orderField.value = h.order; }
+                hotlineForm.setAttribute('action', '/Home/UpdateEmergencyHotline');
+                if (modalTitle) { modalTitle.textContent = 'Edit Emergency Hotline'; }
+                if (submitBtn) { submitBtn.textContent = 'Save Changes'; }
+            }
+
+            if (hotlineModal) {
+                hotlineModal.addEventListener('show.bs.modal', loadHotlines);
+            }
+
+            if (hotlineForm) {
+                hotlineForm.addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    var isEditing = !!document.getElementById('hotlineId')?.value;
+                    var data = encode(hotlineForm);
+                    var url = isEditing ? '/Home/UpdateEmergencyHotline' : '/Home/CreateEmergencyHotline';
+                    post(url, data)
+                        .then(function (result) {
+                            if (result && result.success) {
+                                loadHotlines();
+                                notify(isEditing ? 'Hotline updated.' : 'Hotline added.', 'success');
+                                var formModal = hotlineFormModal && window.bootstrap ? bootstrap.Modal.getInstance(hotlineFormModal) : null;
+                                if (formModal) { formModal.hide(); }
+                            } else {
+                                notify(result?.message || 'Unable to save hotline.', 'danger');
+                            }
+                        })
+                        .catch(function (err) {
+                            console.error(err);
+                            notify('Unable to save hotline.', 'danger');
+                        });
+                });
+            }
+
+            if (hotlineFormModal) {
+                hotlineFormModal.addEventListener('hidden.bs.modal', resetHotlineForm);
+            }
+
+            if (hotlineTableBody) {
+                hotlineTableBody.addEventListener('click', function (e) {
+                    var editBtn = e.target.closest('.edit-hotline');
+                    var deleteBtn = e.target.closest('.delete-hotline');
+
+                    if (editBtn) {
+                        fillHotlineForm({
+                            id: editBtn.getAttribute('data-hotline-id'),
+                            title: editBtn.getAttribute('data-title'),
+                            phone: editBtn.getAttribute('data-phone'),
+                            order: editBtn.getAttribute('data-order')
+                        });
+                        var formModal = window.bootstrap ? bootstrap.Modal.getOrCreateInstance(hotlineFormModal) : null;
+                        if (formModal) { formModal.show(); }
+                    }
+
+                    if (deleteBtn) {
+                        var id = deleteBtn.getAttribute('data-hotline-id');
+                        if (!window.confirm('Delete this emergency hotline?')) { return; }
+                        post('/Home/DeleteEmergencyHotline?id=' + encodeURIComponent(id), '')
+                            .then(function (result) {
+                                if (result && result.success) {
+                                    loadHotlines();
+                                    notify('Hotline deleted.', 'success');
+                                } else {
+                                    notify(result?.message || 'Unable to delete hotline.', 'danger');
+                                }
+                            })
+                            .catch(function (err) {
+                                console.error(err);
+                                notify('Unable to delete hotline.', 'danger');
+                            });
+                    }
+                });
+            }
+
+            // Open form modal from main hotline modal's "Add Hotline" button
+            document.querySelectorAll('[data-bs-target="#emergencyHotlineFormModal"]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    resetHotlineForm();
+                });
+            });
+        })();
     </script>
 }

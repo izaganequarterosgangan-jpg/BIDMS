@@ -640,6 +640,27 @@
     line-height: 1.5;
 }
 
+/* Claim format badge: how the resident wants the document handed over. The two
+   variants are visually distinct (blue for a digital release, amber for a printed
+   pickup) so the secretary can tell them apart at a glance. */
+.claim-format-badge {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.claim-format-digital {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.claim-format-printed {
+    background: #fef3c7;
+    color: #92400e;
+}
+
 .attachment-preview {
     display: flex;
     flex-direction: column;
@@ -665,47 +686,10 @@
 .download-link:hover {
     text-decoration: underline;
 }
-/* ============================================================
-   FIXED SIDEBAR LAYOUT
-   On wide screens the dark sidebar is pinned to the left edge and the content
-   column beside it does the vertical scrolling, so the navigation (including the
-   profile card at its foot) stays put no matter how long the page runs.
-
-   Only positioning is touched: the 260px width, the navy background, the menu
-   icons and the profile card are all left exactly as they were. The child
-   combinators give these rules enough weight to beat the page stylesheets that
-   also declare .sidebar / .main-content, and the breakpoint matches the one the
-   existing responsive rules use, so the stacked mobile layout (sidebar above
-   content) keeps working untouched.
-   ============================================================ */
-
-@media (min-width: 769px) {
-    .page-shell {
-        padding-left: 260px;
-        /* The page must not scroll sideways: a full-bleed row inside the content
-           column would otherwise add a horizontal scrollbar. `clip` is used rather
-           than `hidden` on purpose -- `overflow-x: hidden` makes the browser compute
-           `overflow-y` as `auto`, which turns this box into a second scroll
-           container and is what caused the scroll position to snap back. `clip`
-           removes the overflow without creating a scroller. */
-        overflow-x: clip;
-    }
-
-    .page-shell > .sidebar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        bottom: 0;
-        width: 260px;
-        overflow-y: auto;
-        z-index: 1030;
-    }
-
-    .page-shell > .main-content {
-        height: 100vh;
-        overflow-y: auto;
-    }
-}
+/* The pinned-sidebar / main-column offset now lives in site.css so it applies to
+   every page, not just Documents. Keeping a second copy here (it used to set
+   `padding-left: 260px` on .page-shell) would offset the content column twice now
+   that site.css shifts .main-content with margin-left. */
 
 /* ---- Footer in the content column --------------------------------------
    The element is `class="app-footer"`, deliberately namespaced. It used to carry a
@@ -733,19 +717,4 @@
     padding-bottom: 32px;
 }
 
-/* Printing must keep the geometry it had before the sidebar was pinned, so the
-   printable area still starts at the left edge of the sheet. */
-@media print {
-    .page-shell {
-        padding-left: 0;
-    }
-
-    .page-shell > .sidebar {
-        position: static;
-    }
-
-    .page-shell > .main-content {
-        height: auto;
-        overflow: visible;
-    }
-}
+/* Print geometry for the pinned sidebar is reset in site.css, alongside the pin. */

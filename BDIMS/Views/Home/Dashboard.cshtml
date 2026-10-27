@@ -43,7 +43,7 @@
                 <i class="bi bi-bell"></i>
                 <span id="notifBadgeDashboard" class="notif-badge" style="display:none">0</span>
             </button>
-            <div id="notifDropdown" class="notif-dropdown" aria-hidden="true"></div>
+            <div id="notifDropdown" class="notif-dropdown" aria-hidden="true" data-endpoint-prefix="/Notification"></div>
         </div>
         @* Both profile badges (this header avatar and the sidebar footer block) link to
            My Profile. The badge keeps its own class and dimensions; only the anchor is
@@ -254,59 +254,66 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-        // 1. Bar Chart Configuration
-        const ctxBar = document.getElementById('issuanceChart')?.getContext('2d');
-        if (ctxBar) {
-        new Chart(ctxBar, {
-        type: 'bar',
-        data: {
-        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-        datasets: [{
-        label: 'Requests',
-        data: [@Model.PendingRequestsCount, @Model.CertificatesIssuedCount, @Model.BlotterCasesCount, 0, 0, 0],
-        backgroundColor: '#2563eb',
-        borderRadius: 4
-        }]
-        },
-        options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-        y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
-        x: { grid: { display: false } }
-        }
-        }
-        });
-        }
+            // 1. Bar Chart Configuration - Document Request Trends
+            const ctxBar = document.getElementById('issuanceChart')?.getContext('2d');
+            if (ctxBar) {
+                const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize((ViewBag.ChartLabels as string[]) ?? new[] { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" }));
+                const data = @Html.Raw(System.Text.Json.JsonSerializer.Serialize((ViewBag.MonthlyRequestCounts as int[]) ?? new int[12]));
 
-        // 2. Doughnut Chart Configuration
-        const ctxDoughnut = document.getElementById('demographicsChart')?.getContext('2d');
-        if (ctxDoughnut) {
-        new Chart(ctxDoughnut, {
-        type: 'doughnut',
-        data: {
-        labels: ['Pending', 'Certificates', 'Blotter'],
-        datasets: [{
-        data: [@Model.PendingRequestsCount, @Model.CertificatesIssuedCount, @Model.BlotterCasesCount],
-        backgroundColor: ['#2563eb', '#f59e0b', '#8b5cf6'],
-        borderWidth: 2,
-        borderColor: '#ffffff'
-        }]
-        },
-        options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-        legend: {
-        position: 'bottom',
-        labels: { font: { size: 11 }, boxWidth: 10 }
-        }
-        },
-        cutout: '70%'
-        }
-        });
-        }
+                new Chart(ctxBar, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: 'Requests',
+                            data,
+                            backgroundColor: '#2563eb',
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { 
+                            legend: { display: false } 
+                        },
+                        scales: {
+                            x: { grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { precision: 0 }, grace: '10%', grid: { color: '#f1f5f9' } }
+                        }
+                    }
+                });
+            }
+
+            // 2. Doughnut Chart Configuration
+            const ctxDoughnut = document.getElementById('demographicsChart')?.getContext('2d');
+            if (ctxDoughnut) {
+                const demoLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize((ViewBag.DemoLabels as string[]) ?? new[] { "Registered Voters", "Non-Voters" }));
+                const demoData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize((ViewBag.DemoData as int[]) ?? new int[2]));
+                new Chart(ctxDoughnut, {
+                    type: 'doughnut',
+                    data: {
+                        labels: demoLabels,
+                        datasets: [{
+                            data: demoData,
+                            backgroundColor: ['#198754', '#e9ecef'],
+                            borderWidth: 2,
+                            borderColor: '#ffffff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { font: { size: 11 }, boxWidth: 10 }
+                            }
+                        },
+                        cutout: '70%'
+                    }
+                });
+            }
         });
     </script>
 

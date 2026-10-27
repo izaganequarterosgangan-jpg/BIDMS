@@ -27,21 +27,24 @@ namespace BDIMS.Controllers
     /// through /Account/Login and therefore reaches all of them; anonymous requests are
     /// redirected to the login page.
     /// </summary>
-    [Authorize]
+    [Authorize(Roles = "Administrator")]
     public class HomeController : Controller
     {
         private readonly ApplicationDbContext _db;
         private readonly BarangayProfileProvider _barangayProfile;
         private readonly BDIMS.Services.SystemSettingsProvider _systemSettings;
+        private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _env;
 
         public HomeController(
             ApplicationDbContext db,
             BarangayProfileProvider barangayProfile,
-            BDIMS.Services.SystemSettingsProvider systemSettings)
+            BDIMS.Services.SystemSettingsProvider systemSettings,
+            Microsoft.AspNetCore.Hosting.IWebHostEnvironment env)
         {
             _db = db;
             _barangayProfile = barangayProfile;
             _systemSettings = systemSettings;
+            _env = env;
         }
 
         // Every module reads its rows from MySQL through these accessors, so the data
@@ -235,6 +238,67 @@ namespace BDIMS.Controllers
                     Status = r.Status
                 }).ToList()
             };
+
+            // Document Request Trends bar chart: 12 monthly counts for the current
+            // year, grouped by CreatedAt.Month. Older rows seeded before CreatedAt
+            // existed land on 0001-01-01, so they fall back to parsing the legacy
+            // "MMM d, yyyy" Date string — otherwise October (and every month with
+            // real requests) would render as zero.
+            var currentYear = DateTime.Now.Year;
+            var monthlyRequestCounts = new int[12];
+            var yearGroups = _db.DocumentRequests
+                .GroupBy(r => new { r.CreatedAt.Year, r.CreatedAt.Month })
+                .Select(g => new { g.Key.Year, g.Key.Month, Count = g.Count() })
+                .ToList();
+            foreach (var g in yearGroups)
+            {
+                if (g.Year == currentYear && g.Month >= 1 && g.Month <= 12)
+                {
+                    monthlyRequestCounts[g.Month - 1] += g.Count;
+                }
+                else if (g.Year == 1)
+                {
+                    // Backfill bucket: rows whose CreatedAt was never set. Resolved
+                    // below by parsing their Date strings into the current year.
+                }
+            }
+
+            foreach (var r in _db.DocumentRequests.AsNoTracking().ToList())
+            {
+                if (r.CreatedAt.Year != 1)
+                {
+                    continue;
+                }
+
+                if (DateTime.TryParseExact(
+                        r.Date,
+                        "MMM d, yyyy",
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
+                        out var parsed)
+                    && parsed.Year == currentYear
+                    && parsed.Month >= 1 && parsed.Month <= 12)
+                {
+                    monthlyRequestCounts[parsed.Month - 1]++;
+                }
+            }
+
+            ViewBag.MonthlyRequestCounts = monthlyRequestCounts;
+            ViewBag.ChartLabels = new[] { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+            // Demographics doughnut chart: live voter split queried directly from
+            // the Residents table. Registered = IsVoter == true; Non-Voters =
+            // everyone else. Mutually exclusive so the slices sum to the roster.
+            var voterCount = _db.Residents.AsNoTracking().Count(r => r.IsVoter == true);
+            var totalResidents = _db.Residents.AsNoTracking().Count();
+            var nonVoterCount = totalResidents - voterCount;
+            if (nonVoterCount < 0)
+            {
+                nonVoterCount = 0;
+            }
+
+            ViewBag.DemoLabels = new[] { "Registered Voters", "Non-Voters" };
+            ViewBag.DemoData = new[] { voterCount, nonVoterCount };
 
             return View("~/Views/Home/Dashboard.cshtml", model);
         }
@@ -795,6 +859,11 @@ namespace BDIMS.Controllers
                 );
             }
 
+            // Newest requests first. The id embeds a yyyyMMddHHmmss timestamp
+            // (REQ-20261018104527-D179), so an ordinal descending sort orders the queue
+            // chronologically without needing a separate CreatedAt column.
+            filtered = filtered.OrderByDescending(r => r.Id, StringComparer.OrdinalIgnoreCase);
+
             var vm = new DocumentsViewModel
             {
                 Requests = filtered.ToList(),
@@ -863,6 +932,7 @@ namespace BDIMS.Controllers
                 Resident = resident,
                 Title = title,
                 Date = DateTime.Now.ToString("MMM d, yyyy"),
+                CreatedAt = DateTime.Now,
                 Status = string.IsNullOrWhiteSpace(status) ? "Pending" : status,
                 Purpose = string.IsNullOrWhiteSpace(purpose) ? "N/A" : purpose
             };
@@ -957,6 +1027,11 @@ namespace BDIMS.Controllers
                     date = item.Date,
                     status = item.Status,
                     purpose = item.Purpose,
+                    claimFormat = item.FulfillmentMode,
+                    referenceNumber = item.ReferenceNumber,
+                    receiptImageUrl = item.ReceiptImageUrl,
+                    paymentNote = item.PaymentNote,
+                    adminReply = item.AdminReply,
                     attachmentFileName = item.AttachmentFileName,
                     attachmentMime = item.AttachmentMime,
                     attachmentUrl = item.AttachmentUrl
@@ -964,11 +1039,91 @@ namespace BDIMS.Controllers
             });
         }
 
+        // Alias kept for callers that use the "request details" naming.
+        [HttpGet]
+        public IActionResult GetRequestDetails(string id) => GetDocumentRequest(id);
+
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult UpdateDocumentStatus(string requestId, string newStatus)
+        public IActionResult SaveRequestReply(string requestId, string? adminReply)
         {
-            var allowedStatuses = new[] { "Pending", "In Review", "Processing", "Approved", "Rejected" };
+            var reply = (adminReply ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(requestId) || reply.Length == 0)
+            {
+                TempData["Error"] = "Please enter a reply before saving.";
+                return RedirectToAction("Documents");
+            }
+
+            var existing = _db.DocumentRequests.FirstOrDefault(r => r.Id == requestId);
+            if (existing == null)
+            {
+                TempData["Error"] = "Request not found.";
+                return RedirectToAction("Documents");
+            }
+
+            existing.AdminReply = reply;
+
+            // A reply is an unseen update for the resident, so raise the "My Requests"
+            // badge, flag the request so the resident's feedback icon shows a red dot,
+            // and create a linked notification when the request belongs to an account.
+            existing.IsRead = false;
+            existing.HasUnreadReply = true;
+
+            if (existing.UserAccountId is int residentUserId)
+            {
+                _db.Notifications.Add(new NotificationModel
+                {
+                    UserId = residentUserId,
+                    Title = "Reply from the Barangay Secretary",
+                    Message = $"The Barangay Secretary replied to your request {existing.Id} ({existing.Title}). Open My Requests to view the response.",
+                    Type = "DocumentReply",
+                    IsRead = false,
+                    CreatedAt = DateTime.Now,
+                    RelatedId = existing.Id,
+                    RelatedUrl = "/Resident/Requests"
+                });
+            }
+
+            _db.SaveChanges();
+            TempData["Success"] = "Reply saved and sent to the resident.";
+            return RedirectToAction("Documents");
+        }
+
+        // Opening a request in the Documents table marks it read, which clears both the
+        // in-table "NEW" badge and the sidebar counter on every admin page. Idempotent:
+        // re-opening an already-read request changes nothing.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult MarkDocumentRequestRead(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return BadRequest(new { success = false });
+            }
+
+            var existing = _db.DocumentRequests.FirstOrDefault(r => r.Id == id);
+            if (existing == null)
+            {
+                return NotFound(new { success = false });
+            }
+
+            if (!existing.IsRead)
+            {
+                existing.IsRead = true;
+                _db.SaveChanges();
+            }
+
+            // Counted after the save so the number returned is the persisted truth the
+            // sidebar will render on the next page.
+            var remaining = _db.DocumentRequests.Count(d => !d.IsRead);
+            return Json(new { success = true, remaining });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateDocumentStatus(string requestId, string newStatus)
+        {
+            var allowedStatuses = new[] { "Pending", "In Review", "Processing", "Approved", "Ready for Pickup", "Printed", "Rejected" };
             if (string.IsNullOrWhiteSpace(requestId) || !allowedStatuses.Contains(newStatus))
             {
                 TempData["Error"] = "Invalid request or status.";
@@ -978,8 +1133,60 @@ namespace BDIMS.Controllers
             var existing = documentRequests.FirstOrDefault(r => r.Id == requestId);
             if (existing != null)
             {
+                var previousStatus = existing.Status;
+                var statusChanged = !string.Equals(previousStatus, newStatus, StringComparison.OrdinalIgnoreCase);
                 existing.Status = newStatus;
-                _db.SaveChanges();
+
+                if (statusChanged)
+                {
+                    // A status change is an unseen update for the resident: re-raise the
+                    // "My Requests" badge until they open that page again.
+                    existing.IsRead = false;
+                }
+
+                if (statusChanged
+                    && existing.UserAccountId is int residentUserId)
+                {
+                    // Check resident's notification preference for request updates
+                    var residentAccount = await _db.UserAccounts.FindAsync(residentUserId);
+                    if (residentAccount != null && !residentAccount.NotifyRequestUpdates)
+                    {
+                        // Resident has opted out of request update notifications
+                    }
+                    else
+                    {
+                        // Resident-facing wording: a rejection names the request number so it
+                        // can be matched to the table, an approval/ready status says the
+                        // document can be collected. Anything else keeps a neutral line.
+                        var isRejected = newStatus.Equals("Rejected", StringComparison.OrdinalIgnoreCase);
+                        var isReady = newStatus.Equals("Approved", StringComparison.OrdinalIgnoreCase)
+                            || newStatus.Equals("Ready for Pickup", StringComparison.OrdinalIgnoreCase);
+
+                        var title = isRejected
+                            ? "Request Rejected"
+                            : isReady ? "Document Ready for Pickup" : "Document Request Update";
+
+                        var message = isRejected
+                            ? $"Your request {existing.Id} ({existing.Title}) was rejected."
+                            : isReady
+                                ? $"Your {existing.Title} is ready for pickup."
+                                : $"Your request for {existing.Title} has been updated to '{newStatus}'.";
+
+                        _db.Notifications.Add(new NotificationModel
+                        {
+                            UserId = residentUserId,
+                            Title = title,
+                            Message = message,
+                            Type = isRejected ? "DocumentRejected" : "DocumentStatus",
+                            IsRead = false,
+                            CreatedAt = DateTime.Now,
+                            RelatedId = existing.Id,
+                            RelatedUrl = "/Resident/Requests"
+                        });
+                    }
+                }
+
+                await _db.SaveChangesAsync();
                 TempData["Success"] = "Request updated.";
             }
             else
@@ -1026,7 +1233,7 @@ namespace BDIMS.Controllers
         }
 
         [HttpGet]
-        public IActionResult Certificates(string searchQuery = "")
+        public IActionResult Certificates(string searchQuery = "", string? requestId = null)
         {
             var filtered = certificateList.AsEnumerable();
 
@@ -1040,6 +1247,86 @@ namespace BDIMS.Controllers
                     c.Resident.ToLower().Contains(q) ||
                     c.Status.ToLower().Contains(q)
                 );
+            }
+
+            // Bridge from Documents: "Issue Certificate" pre-fills the walk-in modal with
+            // resident / type / purpose. A "New Document Request" notification instead
+            // arrives with ?requestId=<REQ-...>; resolving the originating request lets
+            // the admin view and print the requested certificate in a single click.
+            var openIssueModal =
+                Request.Query.ContainsKey("issue") && Request.Query["issue"] == "true";
+
+            var prefillResident =
+                Request.Query.ContainsKey("resident") ? Request.Query["resident"].ToString() : string.Empty;
+
+            var prefillTitle =
+                Request.Query.ContainsKey("title") ? Request.Query["title"].ToString() : string.Empty;
+
+            var prefillPurpose =
+                Request.Query.ContainsKey("purpose") ? Request.Query["purpose"].ToString() : string.Empty;
+
+            // Age/Purok are resolved here (from the request, then the resident's account)
+            // so a certificate requested through the portal prints with real values
+            // instead of the raw [ Age ] / [ Purok ] placeholders.
+            var prefillAge = string.Empty;
+            var prefillPurok = string.Empty;
+            var prefillRequestId = string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(requestId))
+            {
+                var request = documentRequests.FirstOrDefault(d =>
+                    string.Equals(d.Id, requestId.Trim(), StringComparison.OrdinalIgnoreCase));
+
+                if (request is not null)
+                {
+                    openIssueModal = true;
+                    prefillResident = string.IsNullOrWhiteSpace(request.FullName)
+                        ? request.Resident
+                        : request.FullName;
+                    prefillTitle = request.Title;
+                    prefillPurpose = string.IsNullOrWhiteSpace(request.Purpose) ? request.Title : request.Purpose;
+                    prefillRequestId = request.Id;
+
+                    var account = FindRequestAccount(request);
+
+                    prefillAge = (request.Age ?? CalculateAge(account?.DateOfBirth))
+                        ?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+
+                    prefillPurok = !string.IsNullOrWhiteSpace(request.Purok)
+                        ? request.Purok.Trim()
+                        : account?.Purok ?? string.Empty;
+
+                    // Opening the request (e.g. from its "New Document Request"
+                    // notification) acknowledges it, clearing the sidebar counters and the
+                    // inline NEW badge. documentRequests returns tracked entities, so the
+                    // change is persisted directly.
+                    if (!request.IsRead)
+                    {
+                        request.IsRead = true;
+                        _db.SaveChanges();
+                    }
+                }
+            }
+
+            // The resident may still have a portal account even when the request is old
+            // or the clerk typed the name by hand, so fill any remaining blanks from it.
+            if (string.IsNullOrWhiteSpace(prefillAge) || string.IsNullOrWhiteSpace(prefillPurok))
+            {
+                var account = FindAccountByResidentName(prefillResident);
+
+                if (account is not null)
+                {
+                    if (string.IsNullOrWhiteSpace(prefillAge))
+                    {
+                        prefillAge = (CalculateAge(account.DateOfBirth) ?? account.Age)
+                            ?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(prefillPurok) && !string.IsNullOrWhiteSpace(account.Purok))
+                    {
+                        prefillPurok = account.Purok;
+                    }
+                }
             }
 
             var viewModel = new CertificatesViewModel
@@ -1062,26 +1349,13 @@ namespace BDIMS.Controllers
                     .ToList(),
                 Puroks = KnownPuroks(),
 
-                // Bridge from Documents: "Issue Certificate" shortcut pre-fills
-                // the walk-in certificate modal with resident / type / purpose.
-                OpenIssueModal =
-                    Request.Query.ContainsKey("issue") &&
-                    Request.Query["issue"] == "true",
-
-                PrefillResident =
-                    Request.Query.ContainsKey("resident")
-                        ? Request.Query["resident"].ToString()
-                        : string.Empty,
-
-                PrefillTitle =
-                    Request.Query.ContainsKey("title")
-                        ? Request.Query["title"].ToString()
-                        : string.Empty,
-
-                PrefillPurpose =
-                    Request.Query.ContainsKey("purpose")
-                        ? Request.Query["purpose"].ToString()
-                        : string.Empty
+                OpenIssueModal = openIssueModal,
+                PrefillResident = prefillResident,
+                PrefillTitle = prefillTitle,
+                PrefillPurpose = prefillPurpose,
+                PrefillAge = prefillAge,
+                PrefillPurok = prefillPurok,
+                PrefillRequestId = prefillRequestId
             };
 
             return View(viewModel);
@@ -1781,11 +2055,56 @@ private static readonly string[] BlotterResolvedStatuses =
             string orNumber,
             string amountPaid,
             string issueDate,
-            string status)
+            string status,
+            string? requestId = null)
         {
             if (!string.IsNullOrWhiteSpace(resident))
             {
                 var issuedOn = ParseIssueDate(issueDate);
+
+                // When the certificate originates from a resident's document request,
+                // back-fill any detail the clerk left blank from the request itself and
+                // then from the linked account, so the Age/Purok/Purpose placeholders
+                // never print empty for a portal requester who is not on the roster.
+                DocumentRequestModel? request = null;
+
+                if (!string.IsNullOrWhiteSpace(requestId))
+                {
+                    var requestKey = requestId.Trim();
+                    request = documentRequests.FirstOrDefault(d =>
+                        string.Equals(d.Id, requestKey, StringComparison.OrdinalIgnoreCase));
+                }
+
+                var account = request is not null
+                    ? FindRequestAccount(request)
+                    : FindAccountByResidentName(resident);
+
+                if (string.IsNullOrWhiteSpace(residentAge))
+                {
+                    residentAge = (request?.Age ?? CalculateAge(account?.DateOfBirth) ?? account?.Age)
+                        ?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+                }
+
+                if (string.IsNullOrWhiteSpace(purok))
+                {
+                    var requestPurok = request?.Purok?.Trim();
+                    purok = !string.IsNullOrWhiteSpace(requestPurok)
+                        ? requestPurok!
+                        : account?.Purok ?? string.Empty;
+                }
+
+                if (string.IsNullOrWhiteSpace(address))
+                {
+                    address = !string.IsNullOrWhiteSpace(request?.Address)
+                        ? request!.Address.Trim()
+                        : account?.Purok ?? string.Empty;
+                }
+
+                if (string.IsNullOrWhiteSpace(purpose) && request is not null
+                    && !string.IsNullOrWhiteSpace(request.Purpose))
+                {
+                    purpose = request.Purpose;
+                }
 
                 var newCert = new CertificateModel
                 {
@@ -1821,6 +2140,14 @@ private static readonly string[] BlotterResolvedStatuses =
                     IssueDate = issuedOn,
                     Issued = issuedOn.ToString("MMM d, yyyy", CultureInfo.InvariantCulture),
 
+                    // Keep the link back to the originating request and the claim format
+                    // the resident chose, so the table can offer "Send Soft Copy" for a
+                    // digital request and the PDF can be delivered to that request.
+                    RequestId = request?.Id ?? string.Empty,
+                    ClaimFormat = string.IsNullOrWhiteSpace(request?.FulfillmentMode)
+                        ? "Printed Hard Copy"
+                        : request!.FulfillmentMode.Trim(),
+
                     Status =
                         string.IsNullOrWhiteSpace(status)
                             ? "Ready"
@@ -1846,6 +2173,518 @@ private static readonly string[] BlotterResolvedStatuses =
             }
 
             return RedirectToAction("Certificates");
+        }
+
+        /// <summary>
+        /// Sends the digital copy of an issued certificate to the resident who asked for
+        /// a digital claim format: the PDF is stored under
+        /// <c>wwwroot/uploads/certificates</c>, the originating request flips to
+        /// "Ready for download" so the portal shows a Download PDF button, and the
+        /// delivery note is saved as the secretary's reply on that request.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SendDigitalCertificate(
+            string certificateId,
+            string requestId,
+            IFormFile? pdfFile,
+            string? deliveryNote)
+        {
+            var cleanCertificateId = (certificateId ?? string.Empty).Trim();
+            var cleanRequestId = (requestId ?? string.Empty).Trim();
+            var cleanNote = (deliveryNote ?? string.Empty).Trim();
+            if (cleanNote.Length > 300)
+            {
+                cleanNote = cleanNote[..300];
+            }
+
+            if (cleanCertificateId.Length == 0)
+            {
+                TempData["Error"] = "The certificate could not be identified.";
+                return RedirectToAction("Certificates");
+            }
+
+            var certificate = await _db.Certificates
+                .FirstOrDefaultAsync(c => c.Id == cleanCertificateId);
+
+            if (certificate == null)
+            {
+                TempData["Error"] = "Certificate not found.";
+                return RedirectToAction("Certificates");
+            }
+
+            // Only a digital request can be delivered as a file; a printed one is
+            // handed over at the barangay hall instead.
+            if (!certificate.ClaimFormat.Equals("Digital Soft Copy", StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["Error"] = "This certificate was requested as a printed hard copy, so there is no digital copy to send.";
+                return RedirectToAction("Certificates");
+            }
+
+            // The certificate knows the request it was issued for. A posted id is only
+            // honoured when it matches that link, so a tampered form cannot deliver the
+            // file to somebody else's request.
+            if (string.IsNullOrWhiteSpace(certificate.RequestId))
+            {
+                TempData["Error"] = "This certificate is not linked to a document request, so the resident cannot receive it in the portal.";
+                return RedirectToAction("Certificates");
+            }
+
+            if (cleanRequestId.Length > 0
+                && !string.Equals(cleanRequestId, certificate.RequestId, StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["Error"] = "That certificate is not linked to the selected request.";
+                return RedirectToAction("Certificates");
+            }
+
+            var request = await _db.DocumentRequests
+                .FirstOrDefaultAsync(d => d.Id == certificate.RequestId);
+
+            if (request == null)
+            {
+                TempData["Error"] = "The document request behind this certificate no longer exists.";
+                return RedirectToAction("Certificates");
+            }
+
+            if (pdfFile is null || pdfFile.Length == 0)
+            {
+                TempData["Error"] = "Attach the certificate PDF before sending it.";
+                return RedirectToAction("Certificates");
+            }
+
+            if (pdfFile.Length > 10L * 1024 * 1024)
+            {
+                TempData["Error"] = "The certificate PDF cannot be larger than 10 MB.";
+                return RedirectToAction("Certificates");
+            }
+
+            if (!Path.GetExtension(pdfFile.FileName).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["Error"] = "Upload the certificate as a PDF file.";
+                return RedirectToAction("Certificates");
+            }
+
+            if (!HasPdfSignature(pdfFile))
+            {
+                TempData["Error"] = "That file does not appear to be a valid PDF.";
+                return RedirectToAction("Certificates");
+            }
+
+            var certificatesDirectory = Path.Combine(
+                _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot"),
+                "uploads",
+                "certificates");
+
+            Directory.CreateDirectory(certificatesDirectory);
+
+            // The stored name is randomised so the PDF cannot be guessed from the
+            // request number by anyone who has the portal URL.
+            var storedFileName =
+                "document-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" +
+                Guid.NewGuid().ToString("N") + ".pdf";
+            var storedPath = Path.Combine(certificatesDirectory, storedFileName);
+
+            await using (var target = new FileStream(
+                storedPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 81920,
+                useAsync: true))
+            {
+                await pdfFile.CopyToAsync(target);
+            }
+
+            request.DocumentPdfUrl = Url.Content("~/uploads/certificates/") + storedFileName;
+            request.Status = "Ready for download";
+
+            // Update certificate status to "Digital Copy Sent" unless already "Printed"
+            if (!certificate.Status.Equals("Printed", StringComparison.OrdinalIgnoreCase))
+            {
+                certificate.Status = "Digital Copy Sent";
+                _db.Certificates.Update(certificate);
+            }
+
+            // The delivery note is the secretary's message about the file, so it is
+            // kept as the request's reply. An empty note keeps the previous reply
+            // instead of wiping feedback the resident has not read yet.
+            if (cleanNote.Length > 0)
+            {
+                request.AdminReply = cleanNote;
+            }
+
+            // The resident has not seen this update yet, so flag the request for the
+            // red dot on their feedback icon.
+            request.HasUnreadReply = true;
+
+            if (request.UserAccountId is int residentUserId)
+            {
+                _db.Notifications.Add(new NotificationModel
+                {
+                    UserId = residentUserId,
+                    Title = "Your certificate is ready to download",
+                    Message = $"The Barangay Secretary sent the digital copy of your {certificate.Title} ({request.Id}). Open My Requests to download it.",
+                    Type = "DigitalCopy",
+                    IsRead = false,
+                    CreatedAt = DateTime.Now,
+                    RelatedId = request.Id,
+                    RelatedUrl = "/Resident/Requests"
+                });
+            }
+
+            try
+            {
+                await _db.SaveChangesAsync();
+            }
+            catch
+            {
+                // Do not leave an orphaned PDF behind when the request row could not be
+                // updated, otherwise the upload folder and the portal disagree.
+                try
+                {
+                    System.IO.File.Delete(storedPath);
+                }
+                catch (IOException)
+                {
+                }
+
+                TempData["Error"] = "The digital copy could not be saved. Please try again.";
+                return RedirectToAction("Certificates");
+            }
+
+            TempData["Success"] = "Digital copy sent. The resident can download it from My Requests.";
+            return RedirectToAction("Certificates");
+        }
+
+        /// <summary>
+        /// Attaches a PDF to an issued certificate: the file is stored under
+        /// <c>wwwroot/uploads/certificates</c> and linked both to the certificate and
+        /// to the document request it came from, which then becomes available for
+        /// download in the resident's portal.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadCertificatePdf(
+            string certificateId,
+            string requestId,
+            IFormFile? pdfFile,
+            string? secretaryNote)
+        {
+            var cleanCertificateId = (certificateId ?? string.Empty).Trim();
+            var cleanRequestId = (requestId ?? string.Empty).Trim();
+            var cleanNote = (secretaryNote ?? string.Empty).Trim();
+            if (cleanNote.Length > 300)
+            {
+                cleanNote = cleanNote[..300];
+            }
+
+            if (cleanCertificateId.Length == 0)
+            {
+                TempData["Error"] = "The certificate could not be identified.";
+                return RedirectToAction("Certificates");
+            }
+
+            var certificate = await _db.Certificates
+                .FirstOrDefaultAsync(c => c.Id == cleanCertificateId);
+
+            if (certificate == null)
+            {
+                TempData["Error"] = "Certificate not found.";
+                return RedirectToAction("Certificates");
+            }
+
+            // The certificate knows the request it was issued for. A posted id is only
+            // honoured when it matches that link, so a tampered form cannot attach the
+            // file to somebody else's request.
+            if (cleanRequestId.Length > 0
+                && !string.Equals(cleanRequestId, certificate.RequestId, StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["Error"] = "That certificate is not linked to the selected request.";
+                return RedirectToAction("Certificates");
+            }
+
+            DocumentRequestModel? request = null;
+            if (!string.IsNullOrWhiteSpace(certificate.RequestId))
+            {
+                request = await _db.DocumentRequests
+                    .FirstOrDefaultAsync(d => d.Id == certificate.RequestId);
+            }
+
+            // Fallback: try to find the request by resident name + document type
+            // when RequestId is missing or didn't match (e.g., legacy data).
+            if (request == null)
+            {
+                request = await _db.DocumentRequests
+                    .Where(d => d.Resident == certificate.Resident && d.Title == certificate.Title)
+                    .OrderByDescending(d => d.CreatedAt)
+                    .FirstOrDefaultAsync();
+            }
+
+            // If no new PDF is uploaded, we only update the notes.
+            // The file is required only when there's no existing PDF attached.
+            bool hasExistingPdf = !string.IsNullOrWhiteSpace(certificate.DocumentPdfUrl);
+            bool isNewUpload = pdfFile != null && pdfFile.Length > 0;
+
+            if (!hasExistingPdf && !isNewUpload)
+            {
+                TempData["Error"] = "Attach the certificate PDF before uploading it.";
+                return RedirectToAction("Certificates");
+            }
+
+            string publicUrl = certificate.DocumentPdfUrl;
+            var replacedUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (isNewUpload)
+            {
+                if (pdfFile.Length > 10L * 1024 * 1024)
+                {
+                    TempData["Error"] = "The certificate PDF cannot be larger than 10 MB.";
+                    return RedirectToAction("Certificates");
+                }
+
+                if (!Path.GetExtension(pdfFile.FileName).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    TempData["Error"] = "Upload the certificate as a PDF file.";
+                    return RedirectToAction("Certificates");
+                }
+
+                if (!HasPdfSignature(pdfFile))
+                {
+                    TempData["Error"] = "That file does not appear to be a valid PDF.";
+                    return RedirectToAction("Certificates");
+                }
+
+                var certificatesDirectory = Path.Combine(
+                    _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot"),
+                    "uploads",
+                    "certificates");
+
+                Directory.CreateDirectory(certificatesDirectory);
+
+                var storedFileName =
+                    "document-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" +
+                    Guid.NewGuid().ToString("N") + ".pdf";
+                var storedPath = Path.Combine(certificatesDirectory, storedFileName);
+
+                await using (var target = new FileStream(
+                    storedPath,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    bufferSize: 81920,
+                    useAsync: true))
+                {
+                    await pdfFile.CopyToAsync(target);
+                }
+
+                publicUrl = Url.Content("~/uploads/certificates/") + storedFileName;
+
+                if (!string.IsNullOrWhiteSpace(certificate.DocumentPdfUrl))
+                {
+                    replacedUrls.Add(certificate.DocumentPdfUrl);
+                }
+                if (request != null && !string.IsNullOrWhiteSpace(request.DocumentPdfUrl))
+                {
+                    replacedUrls.Add(request.DocumentPdfUrl);
+                }
+            }
+
+            certificate.DocumentPdfUrl = publicUrl;
+
+            // Update CertificateNote on the certificate
+            if (cleanNote.Length > 0)
+            {
+                certificate.CertificateNote = cleanNote;
+            }
+
+            if (request != null)
+            {
+                request.DocumentPdfUrl = publicUrl;
+                request.Status = "Ready for download";
+
+                // Update CertificateNote on the request (separate from AdminReply)
+                if (cleanNote.Length > 0)
+                {
+                    request.CertificateNote = cleanNote;
+                }
+
+                request.HasUnreadReply = true;
+                _db.DocumentRequests.Update(request);
+
+                if (request.UserAccountId is int residentUserId)
+                {
+                    _db.Notifications.Add(new NotificationModel
+                    {
+                        UserId = residentUserId,
+                        Title = "Your certificate is ready to download",
+                        Message = $"The Barangay Secretary attached the digital copy of your {certificate.Title} ({request.Id}). Open My Requests to download it.",
+                        Type = "DigitalCopy",
+                        IsRead = false,
+                        CreatedAt = DateTime.Now,
+                        RelatedId = request.Id,
+                        RelatedUrl = "/Resident/Requests"
+                    });
+                }
+            }
+
+            try
+            {
+                await _db.SaveChangesAsync();
+            }
+            catch
+            {
+                if (isNewUpload)
+                {
+                    try
+                    {
+                        var fileName = publicUrl[(publicUrl.LastIndexOf('/') + 1)..];
+                        var storedPath = Path.Combine(
+                            _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot"),
+                            "uploads",
+                            "certificates",
+                            fileName);
+                        System.IO.File.Delete(storedPath);
+                    }
+                    catch (IOException)
+                    {
+                    }
+                }
+
+                TempData["Error"] = "The PDF could not be saved. Please try again.";
+                return RedirectToAction("Certificates");
+            }
+
+            foreach (var replacedUrl in replacedUrls)
+            {
+                DeleteStoredCertificatePdf(replacedUrl);
+            }
+
+            TempData["Success"] = request != null
+                ? "PDF attached. The resident can download it from My Requests."
+                : "PDF attached to the certificate.";
+            return RedirectToAction("Certificates");
+        }
+
+        /// <summary>
+        /// Syncs existing issued certificates to their matching DocumentRequests.
+        /// Matches by RequestId first, then falls back to Resident + Type.
+        /// Updates DocumentPdfUrl, CertificateNote, Status, and HasUnreadReply.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SyncCertificatesToRequests()
+        {
+            var certificates = await _db.Certificates
+                .Where(c => !string.IsNullOrWhiteSpace(c.DocumentPdfUrl))
+                .ToListAsync();
+
+            int updated = 0;
+            foreach (var cert in certificates)
+            {
+                DocumentRequestModel? request = null;
+
+                if (!string.IsNullOrWhiteSpace(cert.RequestId))
+                {
+                    request = await _db.DocumentRequests
+                        .FirstOrDefaultAsync(d => d.Id == cert.RequestId);
+                }
+
+                if (request == null)
+                {
+                    request = await _db.DocumentRequests
+                        .Where(d => d.Resident == cert.Resident && d.Title == cert.Title)
+                        .OrderByDescending(d => d.CreatedAt)
+                        .FirstOrDefaultAsync();
+                }
+
+                if (request != null)
+                {
+                    request.DocumentPdfUrl = cert.DocumentPdfUrl;
+                    request.CertificateNote = cert.CertificateNote;
+                    request.Status = "Ready for download";
+                    request.HasUnreadReply = true;
+                    _db.DocumentRequests.Update(request);
+                    updated++;
+                }
+            }
+
+            if (updated > 0)
+            {
+                await _db.SaveChangesAsync();
+            }
+
+            TempData["Success"] = $"Synced {updated} certificate(s) to document requests.";
+            return RedirectToAction("Certificates");
+        }
+
+        /// <summary>
+        /// Deletes a previously uploaded certificate PDF so replacing a file does not
+        /// leave the old copy behind. Only files inside the uploads/certificates
+        /// folder are removed, and a missing file is not an error.
+        /// </summary>
+        private void DeleteStoredCertificatePdf(string? publicUrl)
+        {
+            var url = (publicUrl ?? string.Empty).Trim();
+            if (url.Length == 0)
+            {
+                return;
+            }
+
+            var fileName = url[(url.LastIndexOf('/') + 1)..];
+            if (fileName.Length == 0 || fileName.Contains("..", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var folder = Path.Combine(
+                _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot"),
+                "uploads",
+                "certificates");
+            var path = Path.GetFullPath(Path.Combine(folder, fileName));
+
+            // Never step outside the folder, whatever the stored url says.
+            if (!path.StartsWith(Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            try
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    System.IO.File.Delete(path);
+                }
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Confirms an upload really starts with the PDF magic number. The extension
+        /// alone is not enough: a renamed script or archive would otherwise be served
+        /// back to the browser as a document.
+        /// </summary>
+        private static bool HasPdfSignature(IFormFile file)
+        {
+            using var stream = file.OpenReadStream();
+            Span<byte> header = stackalloc byte[5];
+            var read = 0;
+
+            while (read < header.Length)
+            {
+                var chunk = stream.Read(header[read..]);
+                if (chunk <= 0)
+                {
+                    break;
+                }
+
+                read += chunk;
+            }
+
+            return read == 5
+                && header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44
+                && header[3] == 0x46 && header[4] == 0x2D;
         }
 
         [HttpPost]
@@ -2115,7 +2954,7 @@ private static readonly string[] BlotterResolvedStatuses =
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult CreateAnnouncement(string title, string purpose, string targetAudience, string date, string priority)
+        public async Task<IActionResult> CreateAnnouncement(string title, string purpose, string targetAudience, string date, string scheduleTime, string priority, string category)
         {
             if (!string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(purpose))
             {
@@ -2125,20 +2964,41 @@ private static readonly string[] BlotterResolvedStatuses =
                     Purpose = purpose.Trim(),
                     TargetAudience = string.IsNullOrWhiteSpace(targetAudience) ? "All Barangay Residents" : targetAudience,
                     Date = string.IsNullOrWhiteSpace(date) ? DateTime.Now.ToString("MMM d, yyyy") : date,
-                    Priority = string.IsNullOrWhiteSpace(priority) ? "Low" : priority
+                    ScheduleTime = scheduleTime?.Trim() ?? string.Empty,
+                    Priority = string.IsNullOrWhiteSpace(priority) ? "Low" : priority,
+                    Category = string.IsNullOrWhiteSpace(category) ? "General" : category
                 };
 
                 _db.Announcements.Add(newAnnouncement);
-                _db.SaveChanges();
+                await _db.SaveChangesAsync();
 
-                // Create a corresponding notification (one per announcement)
-                CreateNotification(
-                    title: "New Announcement",
-                    message: newAnnouncement.Title,
-                    type: "Announcement",
-                    relatedUrl: $"/Home/Announcements#{newAnnouncement.Id}",
-                    relatedId: newAnnouncement.Id.ToString()
-                );
+                var activeResidents = _db.UserAccounts
+                    .Where(a => !a.IsAdmin && a.Status == UserAccountStatus.Active)
+                    .Select(a => a.Id)
+                    .ToList();
+                foreach (var residentId in activeResidents)
+                {
+                    // Check resident's notification preference for announcements
+                    var residentAccount = await _db.UserAccounts.FindAsync(residentId);
+                    if (residentAccount != null && !residentAccount.NotifyAnnouncements)
+                    {
+                        // Resident has opted out of announcement notifications
+                        continue;
+                    }
+
+                    _db.Notifications.Add(new NotificationModel
+                    {
+                        UserId = residentId,
+                        Title = "New Announcement",
+                        Message = $"New Announcement: {newAnnouncement.Title}",
+                        Type = "Announcement",
+                        IsRead = false,
+                        CreatedAt = DateTime.Now,
+                        RelatedId = newAnnouncement.Id.ToString(),
+                        RelatedUrl = $"/Resident/Announcements#{newAnnouncement.Id}"
+                    });
+                }
+                await _db.SaveChangesAsync();
 
                 // Set TempData for non-AJAX fallback and to show toast after reload
                 TempData["Success"] = "Announcement created.";
@@ -2161,7 +3021,9 @@ private static readonly string[] BlotterResolvedStatuses =
                             purpose = newAnnouncement.Purpose,
                             targetAudience = newAnnouncement.TargetAudience,
                             date = newAnnouncement.Date,
-                            priority = newAnnouncement.Priority
+                            scheduleTime = newAnnouncement.ScheduleTime,
+                            priority = newAnnouncement.Priority,
+                            category = newAnnouncement.Category
                         },
                         counts = new
                         {
@@ -2185,7 +3047,7 @@ private static readonly string[] BlotterResolvedStatuses =
         // flows stay impossible to confuse from the client side.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult UpdateAnnouncement(int id, string title, string purpose, string targetAudience, string date, string priority)
+        public IActionResult UpdateAnnouncement(int id, string title, string purpose, string targetAudience, string date, string scheduleTime, string priority, string category)
         {
             // Checked separately from the field validation below. Reporting a missing
             // record as "Title and Purpose are required" sent people looking at the
@@ -2229,7 +3091,9 @@ private static readonly string[] BlotterResolvedStatuses =
             item.Purpose = purpose.Trim();
             item.TargetAudience = string.IsNullOrWhiteSpace(targetAudience) ? "All Barangay Residents" : targetAudience;
             item.Date = string.IsNullOrWhiteSpace(date) ? item.Date : date;
+            item.ScheduleTime = scheduleTime?.Trim() ?? string.Empty;
             item.Priority = string.IsNullOrWhiteSpace(priority) ? item.Priority : priority;
+            item.Category = string.IsNullOrWhiteSpace(category) ? "General" : category;
             _db.SaveChanges();
 
             // The bell shows the announcement title as the notification message, so an
@@ -2266,7 +3130,9 @@ private static readonly string[] BlotterResolvedStatuses =
                         purpose = item.Purpose,
                         targetAudience = item.TargetAudience,
                         date = item.Date,
-                        priority = item.Priority
+                        scheduleTime = item.ScheduleTime,
+                        priority = item.Priority,
+                        category = item.Category
                     },
                     counts = new
                     {
@@ -2319,29 +3185,153 @@ private static readonly string[] BlotterResolvedStatuses =
             return RedirectToAction("Announcements");
         }
 
-        // Return JSON notifications for client-side bell
+        // Emergency Hotlines CRUD ------------------------------------------------
         [HttpGet]
-        public IActionResult GetNotifications()
+        public async Task<IActionResult> GetEmergencyHotlines()
         {
-            // Return combined notifications (for demo we use notificationsList maintained here)
-            var list = notificationsList.OrderByDescending(n => n.CreatedAt).Select(n => new
-            {
-                id = n.Id,
-                title = n.Title,
-                message = n.Message,
-                type = n.Type,
-                isRead = n.IsRead,
-                relatedUrl = n.RelatedUrl,
-                createdAt = n.CreatedAt.ToString("MMM d, yyyy h:mm tt")
-            }).ToList();
+            var hotlines = await _db.EmergencyHotlines
+                .AsNoTracking()
+                .OrderBy(h => h.DisplayOrder)
+                .ToListAsync();
 
-            return Json(list);
+            return Json(new { success = true, hotlines });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CreateEmergencyHotline(string title, string phoneNumber, int displayOrder)
+        {
+            if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(phoneNumber))
+            {
+                return Json(new { success = false, message = "Title and Phone Number are required." });
+            }
+
+            var hotline = new EmergencyHotline
+            {
+                Title = title.Trim(),
+                PhoneNumber = phoneNumber.Trim(),
+                DisplayOrder = displayOrder
+            };
+
+            _db.EmergencyHotlines.Add(hotline);
+            await _db.SaveChangesAsync();
+
+            return Json(new { success = true, id = hotline.Id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateEmergencyHotline(int id, string title, string phoneNumber, int displayOrder)
+        {
+            if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(phoneNumber))
+            {
+                return Json(new { success = false, message = "Title and Phone Number are required." });
+            }
+
+            var hotline = await _db.EmergencyHotlines.FirstOrDefaultAsync(h => h.Id == id);
+            if (hotline == null)
+            {
+                return Json(new { success = false, message = "Hotline not found." });
+            }
+
+            hotline.Title = title.Trim();
+            hotline.PhoneNumber = phoneNumber.Trim();
+            hotline.DisplayOrder = displayOrder;
+            await _db.SaveChangesAsync();
+
+            return Json(new { success = true });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteEmergencyHotline(int id)
+        {
+            var hotline = await _db.EmergencyHotlines.FirstOrDefaultAsync(h => h.Id == id);
+            if (hotline == null)
+            {
+                return Json(new { success = false, message = "Hotline not found." });
+            }
+
+            _db.EmergencyHotlines.Remove(hotline);
+            await _db.SaveChangesAsync();
+
+            return Json(new { success = true });
+        }
+
+        // Return JSON notifications for client-side bell. The admin shell polls this
+        // endpoint every few seconds, so the response carries both the dropdown rows and
+        // the two badge totals the layout needs: every unread notification for the bell,
+        // and the Pending document requests for the sidebar Documents badge.
+        [HttpGet]
+        public async Task<IActionResult> GetNotifications()
+        {
+            var accessible = GetAccessibleNotifications().AsNoTracking();
+
+            var notifications = (await accessible
+                    .OrderByDescending(n => n.CreatedAt)
+                    .ToListAsync())
+                .Select(n => new
+                {
+                    id = n.Id,
+                    title = n.Title,
+                    message = n.Message,
+                    type = n.Type,
+                    isRead = n.IsRead,
+                    relatedUrl = ResolveNotificationUrl(n),
+                    createdAt = n.CreatedAt.ToString("MMM d, yyyy h:mm tt")
+                })
+                .ToList();
+
+            var totalBellCount = await accessible.CountAsync(n => !n.IsRead);
+            var pendingDocRequests = await _db.DocumentRequests
+                .AsNoTracking()
+                .CountAsync(d => d.Status == "Pending");
+
+            return Json(new
+            {
+                success = true,
+                notifications,
+                totalBellCount,
+                pendingDocRequests
+            });
+        }
+
+        // "New Document Request" notifications carry the originating request id in
+        // RelatedId (e.g. "REQ-20261018120000-ABCD"). Clicking one should open the
+        // certificate issue modal for that request so the admin can view/print it
+        // immediately. Rows written before that deep link existed stored "/Home/Documents"
+        // as RelatedUrl, so the URL is derived from RelatedId here rather than trusted
+        // from storage - every "New Document Request" notification, old or new, reaches
+        // the certificate. Non-request notifications fall back to their stored URL.
+        private static string? ResolveNotificationUrl(NotificationModel notification)
+        {
+            var relatedId = (notification.RelatedId ?? string.Empty).Trim();
+
+            if (relatedId.StartsWith("REQ-", StringComparison.OrdinalIgnoreCase))
+            {
+                return "/Home/Certificates?requestId=" + Uri.EscapeDataString(relatedId);
+            }
+
+            // Announcement notifications carry the resident-facing
+            // "/Resident/Announcements#id" URL, which is wrong for the admin portal; route
+            // them at the admin announcement manager instead.
+            if (string.Equals(notification.Type, "Announcement", StringComparison.OrdinalIgnoreCase))
+            {
+                return "/Home/Announcements";
+            }
+
+            return notification.RelatedUrl;
         }
 
         [HttpGet]
         public IActionResult GetUnreadCount()
         {
-            var count = notificationsList.Count(n => !n.IsRead);
+            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var userId = int.TryParse(currentUserId, out var parsedUserId) ? parsedUserId : (int?)null;
+            var count = notificationsList.Count(n => !n.IsRead
+                && ((n.UserId == null && string.IsNullOrWhiteSpace(n.TargetRole))
+                    || (userId.HasValue && n.UserId == userId)
+                    || (!string.IsNullOrWhiteSpace(n.TargetRole) && User.IsInRole(n.TargetRole))));
             return Json(new { count = count });
         }
 
@@ -2357,6 +3347,11 @@ private static readonly string[] BlotterResolvedStatuses =
             var item = _db.Notifications.FirstOrDefault(n => n.Id == id);
             if (item == null) return NotFound(new { success = false, message = "Notification not found" });
 
+            if (!CanAccessNotification(item))
+            {
+                return Forbid();
+            }
+
             // Marking an already-read item again is a no-op rather than an error, so a
             // double-click on the eye icon cannot fail.
             if (!item.IsRead)
@@ -2367,7 +3362,7 @@ private static readonly string[] BlotterResolvedStatuses =
 
             // Counted from the database after the save, so the number returned is the
             // persisted truth and not a guess that the next request might contradict.
-            var unread = _db.Notifications.Count(n => !n.IsRead);
+            var unread = GetAccessibleNotifications().Count(n => !n.IsRead);
             return Json(new { success = true, unread = unread });
         }
 
@@ -2377,20 +3372,29 @@ private static readonly string[] BlotterResolvedStatuses =
         {
             // Only the unread rows are loaded, so the UPDATE touches just those and does
             // not rewrite every notification in the table.
-            var unread = _db.Notifications.Where(n => !n.IsRead).ToList();
+            var unread = GetAccessibleNotifications().Where(n => !n.IsRead).ToList();
             foreach (var n in unread)
             {
                 n.IsRead = true;
             }
 
+            // "Mark all as read" clears the document-request badges too, so the sidebar
+            // counters and every in-table NEW badge disappear in the same click instead of
+            // needing a separate acknowledgement.
+            var unreadRequests = _db.DocumentRequests.Where(d => !d.IsRead).ToList();
+            foreach (var d in unreadRequests)
+            {
+                d.IsRead = true;
+            }
+
             // Without this SaveChanges the whole operation was a no-op and every badge
             // came back on the next page load.
-            if (unread.Count > 0)
+            if (unread.Count > 0 || unreadRequests.Count > 0)
             {
                 _db.SaveChanges();
             }
 
-            return Json(new { success = true, unread = 0, updated = unread.Count });
+            return Json(new { success = true, unread = 0, updated = unread.Count, requestsUpdated = unreadRequests.Count });
         }
 
         // Return full detail of a single notification, including its linked announcement fields
@@ -2399,6 +3403,7 @@ private static readonly string[] BlotterResolvedStatuses =
         {
             var notif = notificationsList.FirstOrDefault(n => n.Id == id);
             if (notif == null) return NotFound(new { success = false, message = "Notification not found" });
+            if (!CanAccessNotification(notif)) return Forbid();
 
             // Resolve the linked announcement so the modal can show full details
             AnnouncementModel? announcement = null;
@@ -2425,6 +3430,30 @@ private static readonly string[] BlotterResolvedStatuses =
                 relatedUrl = notif.RelatedUrl
             });
         }
+
+        [NonAction]
+        private IQueryable<NotificationModel> GetAccessibleNotifications()
+        {
+            var rawUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var hasUserId = int.TryParse(rawUserId, out var userId);
+
+            // Roles are read from the claims before building the query. Calling
+            // User.IsInRole(n.TargetRole) inside the predicate cannot be translated by
+            // EF Core and made every bell request fail before any JSON was returned.
+            var roleNames = User.FindAll(System.Security.Claims.ClaimTypes.Role)
+                .Select(claim => claim.Value)
+                .Where(role => !string.IsNullOrWhiteSpace(role))
+                .ToList();
+
+            return _db.Notifications.Where(n =>
+                (n.UserId == null && (n.TargetRole == null || n.TargetRole == ""))
+                || (hasUserId && n.UserId == userId)
+                || (n.TargetRole != null && n.TargetRole != "" && roleNames.Contains(n.TargetRole)));
+        }
+
+        [NonAction]
+        private bool CanAccessNotification(NotificationModel notification) =>
+            GetAccessibleNotifications().Any(n => n.Id == notification.Id);
 
         // Helper: create a new notification. Accepts createdAt and relatedId for announcement linkage.
         [NonAction]
@@ -2557,6 +3586,57 @@ private static readonly string[] BlotterResolvedStatuses =
                 ?? residentList.FirstOrDefault(r => r.Name.Equals(key, StringComparison.OrdinalIgnoreCase));
         }
 
+        /// <summary>
+        /// Portal account behind a document request, so a certificate can fall back to
+        /// the resident's saved purok and age (derived from <c>DateOfBirth</c>) when the
+        /// request itself did not capture them.
+        /// </summary>
+        [NonAction]
+        private UserAccount? FindRequestAccount(DocumentRequestModel request)
+        {
+            return request.UserAccountId is int id
+                ? _db.UserAccounts.AsNoTracking().FirstOrDefault(u => u.Id == id)
+                : null;
+        }
+
+        /// <summary>
+        /// Best-effort lookup of a portal account by the resident name a clerk selected.
+        /// Matches the display name the certificate stores, then the composed first/last
+        /// pair, so accounts that predate the split-name columns are still found.
+        /// </summary>
+        [NonAction]
+        private UserAccount? FindAccountByResidentName(string? nameOrId)
+        {
+            var key = (nameOrId ?? string.Empty).Trim();
+            if (key.Length == 0)
+            {
+                return null;
+            }
+
+            return _db.UserAccounts.AsNoTracking().FirstOrDefault(u => u.DisplayName == key)
+                ?? _db.UserAccounts.AsNoTracking().FirstOrDefault(
+                       u => (u.FirstName + " " + u.LastName).Trim() == key);
+        }
+
+        [NonAction]
+        private static int? CalculateAge(DateTime? dateOfBirth)
+        {
+            if (!dateOfBirth.HasValue)
+            {
+                return null;
+            }
+
+            var today = DateTime.Today;
+            var age = today.Year - dateOfBirth.Value.Year;
+
+            if (dateOfBirth.Value.Date > today.AddYears(-age))
+            {
+                age--;
+            }
+
+            return age >= 0 ? age : null;
+        }
+
         // Purok options for the issue modal. Derived from the roster, but falls back to
         // the barangay's standard eight puroks so a walk-in can still be issued a
         // certificate when the roster has not recorded anyone in a given purok yet.
@@ -2612,20 +3692,26 @@ private static readonly string[] BlotterResolvedStatuses =
         {
             var resident = FindResident(residentNameOrId);
 
+            // A portal requester may not be on the roster, so fall back to their account
+            // for the age (derived from DateOfBirth) and purok the layout needs.
+            var account = resident is null ? FindAccountByResidentName(residentNameOrId) : null;
+
             // Values captured on the issue form win, since a walk-in may not be on the
             // roster or the clerk may have corrected the record. Anything left blank
-            // falls back to the resident profile.
+            // falls back to the resident profile, then to the account.
             var age = int.TryParse(residentAge?.Trim(), out var parsedAge)
                 ? parsedAge
-                : resident != null ? ParseResidentAge(resident.AgeSex) : null;
+                : resident != null
+                    ? ParseResidentAge(resident.AgeSex)
+                    : CalculateAge(account?.DateOfBirth) ?? account?.Age;
 
             var resolvedPurok = !string.IsNullOrWhiteSpace(purok)
                 ? purok!.Trim()
-                : resident?.Purok ?? string.Empty;
+                : resident?.Purok ?? account?.Purok ?? string.Empty;
 
             var resolvedAddress = !string.IsNullOrWhiteSpace(address)
                 ? address!.Trim()
-                : resident != null ? resident.Purok ?? string.Empty : string.Empty;
+                : resident?.Purok ?? account?.Purok ?? string.Empty;
 
             return new CertificateTemplateData
             {
@@ -2681,6 +3767,14 @@ private static readonly string[] BlotterResolvedStatuses =
             return certificateRulesList
                 .FirstOrDefault(c => c.Type.Equals(certificateType, StringComparison.OrdinalIgnoreCase))?
                 .Fee ?? 0m;
+        }
+
+        // Alias so the Template quick modal can navigate to /Home/TemplateEditor
+        // while the full-page editor keeps its CertificateTemplateEditor name.
+        [HttpGet]
+        public IActionResult TemplateEditor(int? id = null, string? type = null)
+        {
+            return CertificateTemplateEditor(id, type);
         }
 
         [HttpGet]
@@ -2748,6 +3842,15 @@ private static readonly string[] BlotterResolvedStatuses =
                 PreviewResidentId = residents.FirstOrDefault()?.Id ?? "",
                 PreviewPurpose = "ENROLLMENT IN TAGBILARAN CITY COLLEGE (TCC)"
             };
+
+            // Dynamic dropdown source: strictly the certificates configured in the
+            // Settings table (CertificateRules), ordered for the picker. The view
+            // iterates ViewBag.CertificateTypes so it stays 1:1 with Settings.
+            ViewBag.CertificateTypes = _db.CertificateRules
+                .AsNoTracking()
+                .OrderBy(r => r.Type)
+                .Select(r => r.Type)
+                .ToList();
 
             vm.PreviewHtml = CertificateTemplateRenderer.Render(
                 template.TemplateHtml,
@@ -3221,13 +4324,113 @@ private static readonly string[] BlotterResolvedStatuses =
                 CertificateTemplates = certificateTemplateList
                     .OrderBy(t => t.CertificateType, StringComparer.OrdinalIgnoreCase)
                     .ToList(),
-                TemplateTokens = CertificateTemplateRenderer.SupportedTokens.ToList()
+                TemplateTokens = CertificateTemplateRenderer.SupportedTokens.ToList(),
+
+                // Pre-fill the Online Payment Methods card from the persisted
+                // payment details (AppSettings keys + uploaded QR on disk).
+                PaymentMethodName = string.IsNullOrWhiteSpace(ReadPaymentSetting(KeyPaymentMethodName))
+                    ? "GCash"
+                    : ReadPaymentSetting(KeyPaymentMethodName),
+                GcashAccountName = ReadPaymentSetting(KeyPaymentGcashName),
+                GcashAccountNumber = ReadPaymentSetting(KeyPaymentGcashNumber),
+                HasGcashQr = System.IO.File.Exists(GcashQrPath)
             };
 
             return View(
                 "~/Views/Home/Settings.cshtml",
                 model
             );
+        }
+
+        // ============================================================
+        // ONLINE PAYMENT METHODS (GCash QR + account details)
+        // ============================================================
+
+        private const string KeyPaymentMethodName = "Payment.PaymentMethodName";
+        private const string KeyPaymentGcashName = "Payment.GCashAccountName";
+        private const string KeyPaymentGcashNumber = "Payment.GCashAccountNumber";
+
+        /// <summary>
+        /// Absolute path of the stored GCash QR image. Fixed filename so the
+        /// resident-facing payment view can reference a stable URL and a replace
+        /// overwrites in place rather than accumulating orphan files.
+        /// </summary>
+        private string GcashQrPath => System.IO.Path.Combine(
+            _env.WebRootPath ?? System.IO.Path.Combine(_env.ContentRootPath, "wwwroot"),
+            "uploads",
+            "gcash_qr.png");
+
+        private string ReadPaymentSetting(string key)
+        {
+            var row = _db.AppSettings.FirstOrDefault(a => a.Name == key);
+            return row?.Value?.Trim() ?? string.Empty;
+        }
+
+        private void WritePaymentSetting(string key, string value)
+        {
+            var row = _db.AppSettings.FirstOrDefault(a => a.Name == key);
+            if (row == null)
+            {
+                _db.AppSettings.Add(new AppSetting { Name = key, Value = value });
+            }
+            else
+            {
+                row.Value = value;
+            }
+        }
+
+        /// <summary>
+        /// Saves the GCash QR image to wwwroot/uploads/gcash_qr.png and persists
+        /// the account name and mobile/account number so residents can view the
+        /// QR code when making online certificate payments. The QR upload is
+        /// optional: leaving it blank keeps the existing image (if any).
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult SavePaymentSettings(
+            string? paymentMethodName,
+            string? gcashAccountName,
+            string? gcashAccountNumber,
+            Microsoft.AspNetCore.Http.IFormFile? gcashQr)
+        {
+            var methodName = (paymentMethodName ?? string.Empty).Trim();
+            if (methodName.Length == 0)
+            {
+                methodName = "GCash";
+            }
+
+            var accountName = (gcashAccountName ?? string.Empty).Trim();
+            var accountNumber = (gcashAccountNumber ?? string.Empty).Trim();
+
+            // A QR upload must be a real image; anything else is rejected so a
+            // stray file can never be written to the uploads folder.
+            if (gcashQr is { Length: > 0 })
+            {
+                var allowed = new[] { "image/png", "image/jpeg", "image/webp" };
+                var ext = System.IO.Path.GetExtension(gcashQr.FileName).ToLowerInvariant();
+                if (!allowed.Contains(gcashQr.ContentType) ||
+                    (ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".webp"))
+                {
+                    TempData["Error"] = "Please upload a PNG, JPG or WEBP image for the payment QR code.";
+                    return RedirectToAction("Settings", new { tab = "documents" });
+                }
+
+                var uploadsDir = System.IO.Path.GetDirectoryName(GcashQrPath)!;
+                System.IO.Directory.CreateDirectory(uploadsDir);
+
+                using (var stream = System.IO.File.Create(GcashQrPath))
+                {
+                    gcashQr.CopyTo(stream);
+                }
+            }
+
+            WritePaymentSetting(KeyPaymentMethodName, methodName);
+            WritePaymentSetting(KeyPaymentGcashName, accountName);
+            WritePaymentSetting(KeyPaymentGcashNumber, accountNumber);
+            _db.SaveChanges();
+
+            TempData["SuccessMessage"] = "Payment settings saved successfully!";
+            return RedirectToAction("Settings", new { tab = "documents" });
         }
 
 
@@ -3338,54 +4541,92 @@ private static readonly string[] BlotterResolvedStatuses =
 
                 var existingRules = _db.CertificateRules.ToList();
 
-                // Remove rules not in the incoming list
-                var incomingTypes = incoming.Select(c => c.Type).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var toRemove = existingRules.Where(r => !incomingTypes.Contains(r.Type)).ToList();
+                // Match rows by primary key, not by name: the name is editable now, so
+                // matching on Type would treat a rename as a delete + insert and lose
+                // the row's identity (and its linked template).
+                var incomingIds = incoming
+                    .Where(c => c.Id > 0)
+                    .Select(c => c.Id)
+                    .ToHashSet();
+
+                // Remove rules that are no longer on the form.
+                var toRemove = existingRules
+                    .Where(r => !incomingIds.Contains(r.Id))
+                    .ToList();
                 _db.CertificateRules.RemoveRange(toRemove);
+
+                // Old -> new names, used to carry a rename across to its template.
+                var renamedTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 // Update or add rules
                 foreach (var incomingRule in incoming)
                 {
-                    var existing = existingRules.FirstOrDefault(r =>
-                        r.Type.Equals(incomingRule.Type, StringComparison.OrdinalIgnoreCase));
+                    var name = incomingRule.Type.Trim();
+
+                    var existing = incomingRule.Id > 0
+                        ? existingRules.FirstOrDefault(r => r.Id == incomingRule.Id)
+                        : null;
+
                     if (existing != null)
                     {
+                        if (!string.Equals(existing.Type, name, StringComparison.Ordinal))
+                        {
+                            renamedTypes[existing.Type] = name;
+                        }
+
+                        existing.Type = name;
                         existing.Fee = incomingRule.Fee;
                         existing.RequiresResidency = incomingRule.RequiresResidency;
                         existing.Status = incomingRule.Status;
-                        existing.Format = incomingRule.Format;
+                        // Preserve the persisted Format/Template when the posted value is
+                        // null so a NOT NULL column is never assigned null by EF.
+                        existing.Format = incomingRule.Format ?? existing.Format ?? string.Empty;
+                        existing.Template = incomingRule.Template ?? existing.Template ?? string.Empty;
+                        existing.IsCustom = incomingRule.IsCustom;
                     }
                     else
                     {
                         _db.CertificateRules.Add(new CertificateRule
                         {
-                            Type = incomingRule.Type,
+                            Type = name,
                             Fee = incomingRule.Fee,
                             RequiresResidency = incomingRule.RequiresResidency,
                             Status = incomingRule.Status,
-                            Format = incomingRule.Format
+                            // Safely default Format/Template so NOT NULL columns are never null.
+                            Format = incomingRule.Format ?? string.Empty,
+                            Template = incomingRule.Template ?? string.Empty,
+                            IsCustom = incomingRule.IsCustom
                         });
                     }
                 }
 
                 _db.SaveChanges();
 
-                // Keep template fees aligned with the fee table. All() hands back
-                // detached copies, so the aligned fees must be written back explicitly.
+                // Keep linked templates in step: a renamed rule renames its layout so
+                // the fee table keeps reporting "Custom", and template fees stay aligned
+                // with the fee table. All() hands back detached copies, so the aligned
+                // values must be written back explicitly.
                 var aligned = CertificateTemplateStore.All();
 
-                var feeChanged = false;
+                var templateChanged = false;
                 foreach (var template in aligned)
                 {
+                    if (renamedTypes.TryGetValue(template.CertificateName, out var newName)
+                        && !string.Equals(template.CertificateName, newName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        template.CertificateName = newName;
+                        templateChanged = true;
+                    }
+
                     var rule = RuleForTemplate(template);
                     if (rule != null && rule.Fee != template.Fee)
                     {
                         template.Fee = rule.Fee;
-                        feeChanged = true;
+                        templateChanged = true;
                     }
                 }
 
-                if (feeChanged)
+                if (templateChanged)
                 {
                     CertificateTemplateStore.ReplaceAll(aligned);
                 }
@@ -3399,6 +4640,119 @@ private static readonly string[] BlotterResolvedStatuses =
                     tab = model.ActiveTab
                 }
             );
+        }
+
+        /// <summary>
+        /// Inline rename for one Certificates &amp; Fees row. Called by the pencil
+        /// editor in Settings.cshtml when Enter/checkmark is pressed; updates only
+        /// the Type and keeps Format/Template/IsCustom untouched so no null DB
+        /// error can occur. Template layouts keyed by the old name are realigned.
+        /// Accepts a JSON body { id, name } from saveCertificateName.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateCertificateName([FromBody] CertificateNameUpdateDto dto)
+        {
+            if (dto == null || dto.Id <= 0 || string.IsNullOrWhiteSpace(dto.Name))
+            {
+                return Json(new { success = false, message = "A valid certificate is required." });
+            }
+
+            var trimmed = dto.Name.Trim();
+            if (trimmed.Length == 0)
+            {
+                return Json(new { success = false, message = "Certificate name cannot be empty." });
+            }
+
+            var cert = await _db.CertificateRules.FirstOrDefaultAsync(r => r.Id == dto.Id);
+            if (cert == null)
+            {
+                return NotFound(new { success = false, message = "That certificate no longer exists." });
+            }
+
+            var oldName = cert.CertificateType ?? string.Empty;
+            cert.CertificateType = trimmed;
+            // Never allow nulls to reach NOT NULL columns on this path either.
+            cert.Format ??= string.Empty;
+            cert.Template ??= string.Empty;
+            await _db.SaveChangesAsync();
+
+            // Keep saved template layouts following a rename, mirroring SaveSettings.
+            if (!string.Equals(oldName, trimmed, StringComparison.OrdinalIgnoreCase))
+            {
+                var aligned = CertificateTemplateStore.All();
+                var changed = false;
+                foreach (var template in aligned)
+                {
+                    if (string.Equals(template.CertificateName, oldName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        template.CertificateName = trimmed;
+                        changed = true;
+                    }
+                }
+
+                if (changed)
+                {
+                    CertificateTemplateStore.ReplaceAll(aligned);
+                }
+            }
+
+            return Json(new { success = true, newName = cert.CertificateType });
+        }
+
+        /// <summary>
+        /// JSON body for the inline certificate-name editor: { id, name }.
+        /// </summary>
+        public class CertificateNameUpdateDto
+        {
+            public int Id { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+        }
+
+        /// <summary>
+        /// Inline fee update for one Certificates &amp; Fees row. Called by the
+        /// pencil editor in Settings.cshtml when Enter/checkmark is pressed.
+        /// Accepts a JSON body { id, fee } from saveCertificateFee and returns
+        /// the saved fee so the table refreshes instantly.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateCertificateFee([FromBody] CertificateFeeUpdateDto dto)
+        {
+            if (dto == null || dto.Id <= 0)
+            {
+                return Json(new { success = false, message = "A valid certificate is required." });
+            }
+
+            if (dto.Fee < 0)
+            {
+                return Json(new { success = false, message = "Fee cannot be negative." });
+            }
+
+            var cert = await _db.CertificateRules.FirstOrDefaultAsync(r => r.Id == dto.Id);
+            if (cert == null)
+            {
+                return NotFound(new { success = false, message = "That certificate no longer exists." });
+            }
+
+            cert.Fee = Math.Round(dto.Fee, 2, MidpointRounding.AwayFromZero);
+            // Never allow nulls to reach NOT NULL columns on this path either.
+            cert.Format ??= string.Empty;
+            cert.Template ??= string.Empty;
+            await _db.SaveChangesAsync();
+
+            return Json(new { success = true, newFee = cert.Fee });
+        }
+
+        /// <summary>
+        /// JSON body for the inline certificate-fee editor: { id, fee }.
+        /// </summary>
+        public class CertificateFeeUpdateDto
+        {
+            public int Id { get; set; }
+
+            public decimal Fee { get; set; }
         }
 
 

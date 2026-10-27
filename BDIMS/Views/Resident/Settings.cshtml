@@ -1,0 +1,338 @@
+@model BDIMS.Models.ResidentSettingsViewModel
+@{
+    ViewData["Title"] = "Settings";
+    Layout = "_ResidentLayout";
+
+    var fullName = BDIMS.Services.UserClaims.GetDisplayName(User) ?? "Resident";
+    var initials = BDIMS.Services.UserClaims.GetInitials(User);
+    var photoUrl = BDIMS.Services.UserClaims.GetPhotoUrl(User);
+    var accountEmail = BDIMS.Services.UserClaims.GetEmail(User) ?? string.Empty;
+    var headerDate = DateTime.Now.ToString("dddd, MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+    var successMessage = TempData["SettingsSuccessMessage"] as string;
+    var errorMessage = TempData["SettingsErrorMessage"] as string;
+}
+
+<style>
+    /* Colours come from the appearance tokens defined in site.css (--bdims-*), so the
+       whole card follows whichever theme / dark mode is applied to <html> by the head
+       script. Fallbacks keep the original light palette when the tokens are absent. */
+    .resident-settings-page { width: 100%; max-width: 1440px; margin: 0 auto; }
+    /* Centres the settings cards in a comfortable reading column. */
+    .resident-settings-page .settings-stack { width: 100%; max-width: 900px; }
+    .resident-settings-page .settings-eyebrow { color: var(--bdims-accent, #2563eb); font-size: .7rem; font-weight: 800; letter-spacing: .1em; }
+    .resident-settings-page .settings-card { background: var(--bdims-surface, #fff); border: 1px solid var(--bdims-border, #e5eaf2); border-radius: 14px; box-shadow: 0 2px 8px rgba(15,23,42,.04); }
+    .resident-settings-page .settings-card-head { display: flex; align-items: flex-start; gap: .85rem; padding: 1.15rem 1.5rem; border-bottom: 1px solid var(--bdims-border, #eef2f7); }
+    .resident-settings-page .settings-card-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--bdims-accent-soft, #eff6ff); color: var(--bdims-accent, #2563eb); display: flex; align-items: center; justify-content: center; font-size: 1.05rem; flex: 0 0 auto; }
+    .resident-settings-page .settings-card-title { color: var(--bdims-text, #0f172a); font-weight: 800; margin: 0; }
+    .resident-settings-page .settings-card-subtitle { color: var(--bdims-text-muted, #64748b); font-size: .8rem; margin: .15rem 0 0; }
+    .resident-settings-page .settings-card-body { padding: .35rem 1.5rem .85rem; }
+    .resident-settings-page .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--bdims-border, #f1f5f9); }
+    .resident-settings-page .setting-row:last-child { border-bottom: 0; }
+    .resident-settings-page .setting-main { min-width: 0; }
+    .resident-settings-page .setting-label { color: var(--bdims-text, #0f172a); font-weight: 700; margin: 0; font-size: .9rem; }
+    .resident-settings-page .setting-hint { color: var(--bdims-text-muted, #64748b); font-size: .78rem; margin: .15rem 0 0; }
+    .resident-settings-page .setting-control { flex: 0 0 auto; }
+    .resident-settings-page .settings-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--bdims-accent-soft, #dbeafe); color: var(--bdims-accent, #1d4ed8); display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 800; overflow: hidden; text-decoration: none; flex: 0 0 auto; }
+    .resident-settings-page .settings-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    /* Toggle switch. */
+    .resident-settings-page .toggle-switch { position: relative; width: 44px; height: 24px; flex: 0 0 auto; display: inline-block; }
+    .resident-settings-page .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .resident-settings-page .toggle-switch .slider { position: absolute; cursor: pointer; inset: 0; background: #cbd5e1; border-radius: 24px; transition: .2s; }
+    .resident-settings-page .toggle-switch .slider::before { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+    .resident-settings-page .toggle-switch input:checked + .slider { background: var(--bdims-accent, #1e40af); }
+    .resident-settings-page .toggle-switch input:checked + .slider::before { transform: translateX(20px); }
+
+    /* Notification channels. */
+    .resident-settings-page .channel-box { background: var(--bdims-surface-muted, #f8fafc); border: 1px solid var(--bdims-border, #eef2f7); border-radius: 10px; padding: .85rem 1rem; }
+    .resident-settings-page .channel-box .form-check-label { font-size: .85rem; color: var(--bdims-text-body, #334155); font-weight: 600; }
+
+    /* Dark mode ON / OFF label beside the switch. */
+    .resident-settings-page .toggle-state { min-width: 2.1rem; text-align: right; font-size: .75rem; font-weight: 800; letter-spacing: .05em; color: var(--bdims-text-muted, #64748b); }
+    .resident-settings-page .toggle-state.is-on { color: var(--bdims-accent, #2563eb); }
+
+    .resident-settings-page .settings-actions { display: flex; justify-content: flex-end; gap: .65rem; padding: .25rem 0 0; }
+
+    @@media (max-width: 767.98px) {
+        .resident-settings-page .setting-row { align-items: flex-start; }
+    }
+</style>
+
+<div class="resident-settings-page">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <div>
+            <h1 class="h3 fw-bold mb-1">Settings</h1>
+            <p class="text-muted small mb-0">@headerDate · Bohol</p>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <form asp-controller="Resident" asp-action="Requests" method="get" class="resident-search d-flex align-items-center gap-2 bg-body border rounded-3 px-2 py-1">
+                <i class="bi bi-search text-muted"></i>
+                <input name="searchQuery" class="form-control form-control-sm border-0 shadow-none" placeholder="Search services..." style="width: 175px;" />
+            </form>
+            @await Html.PartialAsync("_NotificationBell")
+            <a asp-controller="Resident" asp-action="Profile" class="settings-avatar" title="@fullName">
+                @if (!string.IsNullOrWhiteSpace(photoUrl))
+                {
+                    <img src="@photoUrl" alt="@fullName" />
+                }
+                else
+                {
+                    @initials
+                }
+            </a>
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <div class="settings-eyebrow text-uppercase mb-1">ACCOUNT PREFERENCES</div>
+        <h2 class="h2 fw-bold mb-2">Manage your account</h2>
+        <p class="text-muted mb-0">Control your security, how the barangay reaches you, and how the portal looks.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <div class="alert alert-success d-flex align-items-center gap-2" role="alert">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@successMessage</span>
+        </div>
+    }
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>@errorMessage</span>
+        </div>
+    }
+
+    <form id="residentSettingsForm" asp-controller="Resident" asp-action="SaveSettings" method="post">
+        @Html.AntiForgeryToken()
+
+        <div class="settings-stack mx-auto">
+
+                <!-- ACCOUNT SECURITY -->
+                <div class="settings-card mb-4">
+                    <div class="settings-card-head">
+                        <div class="settings-card-icon"><i class="bi bi-shield-lock-fill"></i></div>
+                        <div>
+                            <h3 class="settings-card-title h5 mb-0">Account Security</h3>
+                            <p class="settings-card-subtitle mb-0">Protect your account and manage where you are signed in.</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <p class="setting-label mb-0">Password</p>
+                                <p class="setting-hint mb-0">Use a strong password you do not reuse on other sites.</p>
+                            </div>
+                            <div class="setting-control">
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
+                                    <i class="bi bi-key me-1"></i> Change password
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <p class="setting-label mb-0">Signed-in devices</p>
+                                <p class="setting-hint mb-0">This device · Windows · current session@(string.IsNullOrWhiteSpace(accountEmail) ? string.Empty : $" · {accountEmail}")</p>
+                            </div>
+                            <div class="setting-control">
+                                <button type="submit" form="signOutOtherDevicesForm" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-box-arrow-right me-1"></i> Sign out others
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NOTIFICATION PREFERENCES -->
+                <div class="settings-card mb-4">
+                    <div class="settings-card-head">
+                        <div class="settings-card-icon"><i class="bi bi-bell-fill"></i></div>
+                        <div>
+                            <h3 class="settings-card-title h5 mb-0">Notification Preferences</h3>
+                            <p class="settings-card-subtitle mb-0">Choose what the barangay tells you about and how it reaches you.</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <p class="setting-label mb-0">Request updates</p>
+                                <p class="setting-hint mb-0">Status changes on your document requests.</p>
+                            </div>
+                            <div class="setting-control">
+                                <label class="toggle-switch mb-0">
+                                    <input asp-for="RequestUpdates" id="NotifyRequestUpdates" />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <p class="setting-label mb-0">Barangay announcements</p>
+                                <p class="setting-hint mb-0">Community news, activities and advisories.</p>
+                            </div>
+                            <div class="setting-control">
+                                <label class="toggle-switch mb-0">
+                                    <input asp-for="BarangayAnnouncements" id="NotifyAnnouncements" />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        </div>
+                </div>
+
+                <!-- APPEARANCE -->
+                <div class="settings-card mb-4">
+                    <div class="settings-card-head">
+                        <div class="settings-card-icon"><i class="bi bi-palette-fill"></i></div>
+                        <div>
+                            <h3 class="settings-card-title h5 mb-0">Appearance</h3>
+                            <p class="settings-card-subtitle mb-0">Switch the portal between a light and a dark palette.</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <p class="setting-label mb-0">Dark mode</p>
+                                <p class="setting-hint mb-0">Applies across every page of the resident portal.</p>
+                            </div>
+                            <div class="setting-control d-flex align-items-center gap-2">
+                                <span class="toggle-state" id="darkModeState" aria-live="polite">OFF</span>
+                                <label class="toggle-switch mb-0">
+                                    <input asp-for="DarkMode" id="DarkMode" />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- The theme picker was removed; the stored value is kept so saving
+                             this page does not silently reset the saved theme. -->
+                        <input type="hidden" asp-for="SelectedTheme" />
+                    </div>
+                </div>
+
+                <div class="settings-actions">
+                    <a asp-controller="Resident" asp-action="Dashboard" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check2 me-1"></i> Save changes
+                    </button>
+                </div>
+        </div>
+    </form>
+
+    <!-- Kept outside the settings form: a button inside a card submits this one via its
+         form="..." attribute, because HTML does not allow nested forms. -->
+    <form id="signOutOtherDevicesForm" asp-controller="Resident" asp-action="SignOutOtherDevices" method="post">
+        @Html.AntiForgeryToken()
+    </form>
+
+    <partial name="_ChangePasswordModal" model="new BDIMS.Models.ChangePasswordViewModel()" />
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            // The resident-only key the head script in _ResidentLayout reads back on every
+            // resident page. It is deliberately distinct from the admin portal's
+            // "admin_theme", so toggling dark mode here never changes the admin portal.
+            var DARK_KEY = 'resident_theme';
+
+            var root = document.documentElement;
+            var darkToggle = document.getElementById('DarkMode');
+            var darkState = document.getElementById('darkModeState');
+
+            if (!darkToggle) { return; }
+
+            function saveTheme(value) {
+                // Strictly localStorage.setItem under the resident-only key; nothing else
+                // is written, so the admin portal's "admin_theme" is never touched.
+                try {
+                    if (window.localStorage) { window.localStorage.setItem(DARK_KEY, value); }
+                } catch (e) { /* storage blocked: the choice simply will not persist */ }
+            }
+
+            // The switch mirrors whatever palette the page is actually wearing. The head
+            // script sets data-bs-theme from the saved localStorage/cookie preference; when
+            // nothing is stored we fall back to the OS preference, then to the value the
+            // page was rendered with.
+            function isCurrentlyDark() {
+                var attr = root.getAttribute('data-bs-theme');
+                if (attr === 'dark') { return true; }
+                if (attr === 'light') { return false; }
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) { return true; }
+                return darkToggle.checked;
+            }
+
+            function applyDarkMode() {
+                root.setAttribute('data-bs-theme', darkToggle.checked ? 'dark' : 'light');
+            }
+
+            function updateDarkState() {
+                if (!darkState) { return; }
+                darkState.textContent = darkToggle.checked ? 'ON' : 'OFF';
+                darkState.classList.toggle('is-on', darkToggle.checked);
+            }
+
+            // 1. On load, make the switch (and the label) match the live theme state.
+            darkToggle.checked = isCurrentlyDark();
+            applyDarkMode();
+            updateDarkState();
+
+            // 2. On toggle, preview instantly, relabel and persist so every page stays synced.
+            darkToggle.addEventListener('change', function () {
+                applyDarkMode();
+                updateDarkState();
+                saveTheme(darkToggle.checked ? 'dark' : 'light');
+            });
+
+            // 3. On save, persist again alongside the rest of the settings.
+            var form = document.getElementById('residentSettingsForm');
+            if (form) {
+                form.addEventListener('submit', function () {
+                    applyDarkMode();
+                    saveTheme(darkToggle.checked ? 'dark' : 'light');
+                });
+            }
+
+            // 4. Notification preference toggles: auto-save via AJAX when flipped
+            function setupNotificationToggle(toggleId, preferenceKey) {
+                var toggle = document.getElementById(toggleId);
+                if (!toggle) return;
+
+                toggle.addEventListener('change', function () {
+                    var enabled = this.checked;
+                    var meta = document.querySelector('meta[name="csrf-token"]');
+                    var token = meta ? meta.getAttribute('content') : '';
+
+                    fetch('/Resident/UpdateNotificationPreference', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                            'RequestVerificationToken': token,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: new URLSearchParams({ preference: preferenceKey, enabled: enabled })
+                    })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data || !data.success) {
+                            console.error('Failed to update notification preference', data);
+                            // Revert the toggle on failure
+                            toggle.checked = !enabled;
+                        }
+                    })
+                    .catch(function (err) {
+                        console.error('Error updating notification preference', err);
+                        toggle.checked = !enabled;
+                    });
+                });
+            }
+
+            setupNotificationToggle('NotifyRequestUpdates', 'RequestUpdates');
+            setupNotificationToggle('NotifyAnnouncements', 'Announcements');
+        })();
+    </script>
+}

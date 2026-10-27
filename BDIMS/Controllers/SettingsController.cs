@@ -17,7 +17,7 @@ namespace BDIMS.Controllers
     /// <see cref="CertificateTemplateStore"/>) rather than in a database, so no ORM or
     /// migration is involved.
     /// </summary>
-    [Authorize]
+    [Authorize(Roles = "Administrator")]
     public class SettingsController : Controller
     {
         private readonly BarangayProfileProvider _barangayProfile;

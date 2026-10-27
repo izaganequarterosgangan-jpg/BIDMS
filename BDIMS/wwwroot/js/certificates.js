@@ -119,6 +119,8 @@
                     printPreviewedCert();
                 } else if (action === 'edit') {
                     openEditCert(btn);
+                } else if (action === 'send-digital-copy') {
+                    openSendDigital(btn);
                 } else if (action === 'delete') {
                     deleteCert(btn);
                 }
@@ -143,9 +145,9 @@
             }
 
             function statusPillClass(status) {
-                if (status === 'Pending') return 'status-pending';
                 if (status === 'Printed') return 'status-complete';
-                return 'status-ready';
+                if (status === 'Digital Copy Sent' || status === 'Digital Sent') return 'status-processing';
+                return 'status-pending';
             }
 
             function refreshCounters(d) {
@@ -271,6 +273,32 @@
                         btns[i].setAttribute('data-issuedate', item.issuedate || '');
                     }
                 }
+            }
+
+            // Opens the "Send Digital Copy" modal for a digital certificate: the
+            // resident gets the PDF as a download on their request in the portal.
+            function openSendDigital(btn) {
+                var certId = btn.getAttribute('data-id') || '';
+                if (!certId) return;
+
+                field('sendDigitalCertificateId').value = certId;
+                field('sendDigitalRequestId').value = btn.getAttribute('data-request-id') || '';
+
+                var target = field('sendDigitalTarget');
+                if (target) {
+                    var title = btn.getAttribute('data-title') || 'certificate';
+                    var resident = btn.getAttribute('data-resident') || 'the resident';
+                    target.innerHTML = 'Sending <strong>' + escapeHtml(title) + '</strong> to ' +
+                        escapeHtml(resident) + '. The request becomes "Ready for download" once the PDF is saved.';
+                }
+
+                var pdfInput = field('sendDigitalPdf');
+                if (pdfInput) pdfInput.value = '';
+
+                var noteInput = field('sendDigitalNote');
+                if (noteInput) noteInput.value = '';
+
+                showModal('sendDigitalModal');
             }
 
             function submitEditCert(event) {
@@ -471,7 +499,7 @@
 
             function selectPurok(value) {
                 var purokField = field('formPurok');
-                if (!purokField) return;
+                if (!purokField || !value) return;
 
                 for (var p = 0; p < purokField.options.length; p++) {
                     if (purokField.options[p].value === value) {
@@ -479,6 +507,14 @@
                         return;
                     }
                 }
+
+                // A portal account's purok may not be one of the roster-derived options;
+                // add it rather than silently dropping the value the certificate needs.
+                var opt = document.createElement('option');
+                opt.value = value;
+                opt.textContent = value;
+                purokField.appendChild(opt);
+                purokField.value = value;
             }
 
             // Fills Age and Purok from the roster when the name matches one. The fields
@@ -535,6 +571,14 @@
 
                 if (prefill.resident) field('formResident').value = prefill.resident;
                 if (prefill.purpose) field('formPurpose').value = prefill.purpose;
+
+                // Age/Purok from the document request (or the resident's account), so a
+                // portal requester who is not on the roster still prints populated.
+                if (prefill.age) {
+                    var ageField = field('formResidentAge');
+                    if (ageField) ageField.value = prefill.age;
+                }
+                if (prefill.purok) selectPurok(prefill.purok);
 
                 if (prefill.title) {
                     var fTitle = field('formTitle');

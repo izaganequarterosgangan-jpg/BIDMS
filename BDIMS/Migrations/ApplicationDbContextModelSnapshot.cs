@@ -30,6 +30,10 @@ namespace BDIMS.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Date")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -39,6 +43,10 @@ namespace BDIMS.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ScheduleTime")
                         .IsRequired()
                         .HasColumnType("longtext");
 
@@ -156,6 +164,18 @@ namespace BDIMS.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("CertificateNote")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ClaimFormat")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("DocumentPdfUrl")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Format")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -176,6 +196,10 @@ namespace BDIMS.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("RequestId")
                         .IsRequired()
                         .HasColumnType("longtext");
 
@@ -219,10 +243,17 @@ namespace BDIMS.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<bool>("IsCustom")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<bool>("RequiresResidency")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Template")
                         .IsRequired()
                         .HasColumnType("longtext");
 
@@ -240,6 +271,17 @@ namespace BDIMS.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("varchar(255)");
 
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("AdminReply")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("Age")
+                        .HasColumnType("int");
+
                     b.Property<string>("AttachmentData")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -252,7 +294,40 @@ namespace BDIMS.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("CertificateNote")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("Date")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("DocumentPdfUrl")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("FulfillmentMode")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("HasUnreadReply")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("PaymentNote")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Purok")
                         .IsRequired()
                         .HasColumnType("longtext");
 
@@ -260,7 +335,19 @@ namespace BDIMS.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("ReceiptImageUrl")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ReferenceNumber")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Resident")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ResidentId")
                         .IsRequired()
                         .HasColumnType("longtext");
 
@@ -272,9 +359,37 @@ namespace BDIMS.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<int?>("UserAccountId")
+                        .HasColumnType("int")
+                        .HasColumnName("UserAccountId");
+
                     b.HasKey("Id");
 
                     b.ToTable("DocumentRequests");
+                });
+
+            modelBuilder.Entity("BDIMS.Models.EmergencyHotline", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("EmergencyHotlines");
                 });
 
             modelBuilder.Entity("BDIMS.Models.NotificationModel", b =>
@@ -303,6 +418,10 @@ namespace BDIMS.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("TargetRole")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -310,6 +429,9 @@ namespace BDIMS.Migrations
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasColumnType("longtext");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -398,12 +520,23 @@ namespace BDIMS.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("Age")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CivilStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
                     b.Property<string>("ContactNumber")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("varchar(32)");
 
                     b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("DateOfBirth")
                         .HasColumnType("datetime(6)");
 
                     b.Property<string>("DisplayName")
@@ -426,6 +559,11 @@ namespace BDIMS.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)");
 
+                    b.Property<string>("Gender")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
                     b.Property<string>("Initials")
                         .IsRequired()
                         .HasMaxLength(8)
@@ -442,10 +580,27 @@ namespace BDIMS.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)");
 
+                    b.Property<DateTime?>("LockoutEnd")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("LockoutReason")
+                        .HasMaxLength(256)
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("MiddleName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
                     b.Property<string>("NormalizedEmail")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)");
+
+                    b.Property<bool>("NotifyAnnouncements")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("NotifyRequestUpdates")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -455,10 +610,29 @@ namespace BDIMS.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)");
 
+                    b.Property<string>("Purok")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("Suffix")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<string>("VoterStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
 
                     b.HasKey("Id");
 

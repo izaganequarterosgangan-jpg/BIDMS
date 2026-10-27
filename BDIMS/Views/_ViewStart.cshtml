@@ -1,4 +1,7 @@
 ﻿@{
-    Layout = null; // Full layout view
-    ViewData["Title"] = "Dashboard - BIDMS";
+    // Get the name of the current controller handling the request
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+
+    // Automatically assign layout: Resident portal uses _ResidentLayout, Admin uses _Layout
+    Layout = (currentController == "Resident") ? "_ResidentLayout" : "_Layout";
 }

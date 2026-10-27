@@ -55,7 +55,7 @@
                         <label class="tpl-field">
                             <span>Certificate Type</span>
                             <select name="type" id="tplTypeSelect" class="tpl-select" onchange="this.form.submit()">
-                                @foreach (var type in Model.CertificateTypes)
+                                @foreach (var type in (ViewBag.CertificateTypes as List<string>) ?? new List<string>())
                                 {
                                     <option value="@type" selected="@(type.Equals(Model.Template.CertificateName, StringComparison.OrdinalIgnoreCase))">@type</option>
                                 }

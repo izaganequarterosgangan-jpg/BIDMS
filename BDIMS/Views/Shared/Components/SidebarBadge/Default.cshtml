@@ -1,0 +1,12 @@
+@model int
+@{
+    // Component views must not be wrapped by the shared layout; clear any Layout
+    // picked up from _ViewStart and just emit the badge markup.
+    //
+    // The element is always rendered (hidden at zero) rather than omitted, so the
+    // client-side "Mark all as read" handler has a node to clear without a page reload.
+    Layout = null;
+}
+<span class="badge rounded-pill bg-danger ms-auto sidebar-badge"
+      title="@Model document request@(Model == 1 ? "" : "s") awaiting review"
+      style="@(Model > 0 ? "" : "display:none")">@Model</span>

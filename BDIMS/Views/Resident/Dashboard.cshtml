@@ -1,0 +1,248 @@
+﻿@model BDIMS.Models.ResidentDashboardViewModel
+@{
+    ViewData["Title"] = "Dashboard";
+
+    var fullName = string.IsNullOrWhiteSpace(Model?.ResidentName)
+        ? (BDIMS.Services.UserClaims.GetDisplayName(User) ?? "Resident")
+        : Model.ResidentName;
+    var firstName = (BDIMS.Services.UserClaims.GetFirstName(User) ?? string.Empty).Trim();
+    if (string.IsNullOrWhiteSpace(firstName))
+    {
+        firstName = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "Resident";
+    }
+    var headerInitials = BDIMS.Services.UserClaims.GetInitials(User);
+    if (string.IsNullOrWhiteSpace(headerInitials) || headerInitials == "?" )
+    {
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        headerInitials = parts.Length == 0 ? "R"
+            : parts.Length == 1 ? parts[0].Substring(0, Math.Min(2, parts[0].Length)).ToUpperInvariant()
+            : (parts[0][0].ToString() + parts[^1][0].ToString()).ToUpperInvariant();
+    }
+    var headerDate = DateTime.Now.ToString("dddd, MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+
+    string StatusBadgeClass(string? status)
+    {
+        var s = (status ?? string.Empty).Trim().ToLowerInvariant();
+        if (s is "ready for pickup" or "approved" or "ready") return "res-badge-ready";
+        if (s is "pending" or "in review" or "processing") return "res-badge-pending";
+        return "res-badge-issued";
+    }
+    string StatusLabel(string? status)
+    {
+        var s = (status ?? string.Empty).Trim();
+        if (string.Equals(s, "Approved", StringComparison.OrdinalIgnoreCase)) return "Ready for pickup";
+        if (string.Equals(s, "Released", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(s, "Completed", StringComparison.OrdinalIgnoreCase)) return "Issued";
+        return string.IsNullOrWhiteSpace(s) ? "Pending" : s;
+    }
+    (string Month, string Day) SplitDateBadge(BDIMS.Models.ResidentAnnouncementItem ann)
+    {
+        if (DateTime.TryParse(ann?.FullDate, out var dt))
+            return (dt.ToString("MMM", System.Globalization.CultureInfo.InvariantCulture).ToUpperInvariant(), dt.Day.ToString("00"));
+        if (DateTime.TryParse(ann?.DateString, out var dt2))
+            return (dt2.ToString("MMM", System.Globalization.CultureInfo.InvariantCulture).ToUpperInvariant(), dt2.Day.ToString("00"));
+        var tokens = (ann?.DateString ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length >= 2) return (tokens[0].ToUpperInvariant(), tokens[1]);
+        if (tokens.Length == 1) return (tokens[0].ToUpperInvariant(), string.Empty);
+        return ("—", string.Empty);
+    }
+}
+
+<style>
+    /* Resident dashboard — scoped to this view so the admin dashboard is untouched. */
+    .resident-dashboard { background: #f8f9fa; width: 100%; }
+    .resident-dashboard .welcome-eyebrow { font-size: .72rem; letter-spacing: .08em; font-weight: 700; color: #2563eb; }
+    .resident-dashboard .welcome-title { font-weight: 800; color: #0f172a; letter-spacing: -.01em; }
+    .resident-dashboard .alert-banner { background: #eef4ff; border: 1px solid #cfe0ff; border-radius: 12px; }
+    .resident-dashboard .stat-card { background: #fff; border: 1px solid #e9eef5; border-radius: 12px; box-shadow: 0 1px 2px rgba(15,23,42,.04); height: 100%; }
+    .resident-dashboard .stat-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0; }
+    .bg-warning-light { background: #fef3c7; } .bg-success-light { background: #d1fae5; } .bg-primary-light { background: #dbeafe; }
+    .res-badge-ready { background: #d1fae5; color: #059669; border-radius: 999px; padding: .25rem .65rem; font-size: .72rem; font-weight: 700; }
+    .res-badge-pending { background: #fef3c7; color: #b45309; border-radius: 999px; padding: .25rem .65rem; font-size: .72rem; font-weight: 700; }
+    .res-badge-issued { background: #dbeafe; color: #1d4ed8; border-radius: 999px; padding: .25rem .65rem; font-size: .72rem; font-weight: 700; }
+    .doc-icon-tile { width: 40px; height: 40px; border-radius: 10px; background: #eef2ff; color: #4f46e5; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+    .avatar-circle-sm { width: 36px; height: 36px; border-radius: 50%; background: #0F172A; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: .75rem; overflow: hidden; flex-shrink: 0; }
+    .date-badge { width: 48px; text-align: center; background: #f1f5f9; border-radius: 10px; padding: 6px 0; flex-shrink: 0; }
+    .date-badge .month { display: block; font-size: .65rem; font-weight: 800; color: #475569; letter-spacing: .04em; }
+    .date-badge .day { display: block; font-size: 1rem; font-weight: 800; color: #0f172a; }
+    .notice-box { background: #f1f5f9; border-radius: 10px; padding: .6rem .9rem; font-size: .8rem; color: #475569; }
+    .request-row-link { text-decoration: none; }
+    .request-row-link:hover .fw-bold { color: #1d4ed8; }
+    .badge-verified { background: #d1fae5; color: #059669; border-radius: 999px; padding: .25rem .6rem; font-size: .72rem; font-weight: 700; }
+</style>
+
+<div class="dashboard-container resident-dashboard">
+    <!-- Top Row: title left, utilities right -->
+    <div class="dashboard-header-row d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+        <div>
+            <h2 class="mb-0 fw-bold">Dashboard</h2>
+            <p class="text-muted mb-0 small">@headerDate · Bohol</p>
+        </div>
+        <div class="header-actions d-flex align-items-center gap-2">
+            <form asp-controller="Resident" asp-action="Requests" method="get" class="search-box resident-search d-flex align-items-center gap-2 bg-white border rounded-3 px-2 py-1">
+                <i class="bi bi-search text-muted"></i>
+                <input type="text" name="searchQuery" placeholder="Search services..." class="form-control border-0 shadow-none" style="width: 180px;" />
+            </form>
+            @await Html.PartialAsync("_NotificationBell")
+            <a asp-controller="Resident" asp-action="Profile" class="avatar-circle-sm text-decoration-none" title="@fullName">
+                @if (BDIMS.Services.UserClaims.GetPhotoUrl(User) is { } headerPhotoUrl)
+                {
+                    <img class="avatar-photo-image" src="@headerPhotoUrl" alt="@fullName" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                }
+                else
+                {
+                    @headerInitials
+                }
+            </a>
+        </div>
+    </div>
+
+    <!-- Welcome Banner -->
+    <div class="welcome-banner-row card shadow-sm rounded-3 mb-3">
+        <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <span class="welcome-eyebrow text-uppercase">YOUR BARANGAY, WITHIN REACH</span>
+                <h1 class="welcome-title h3 mb-1">Magandang araw, @firstName!</h1>
+                <p class="text-muted mb-0 small">Manage your documents and stay connected with your barangay.</p>
+            </div>
+            <div>
+                <a href="/Resident/Requests" class="btn btn-primary btn-new-request">+ Request Document</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Alert Banner (dynamic) -->
+    @if (Model != null && Model.HasActiveAlert && !string.IsNullOrWhiteSpace(Model.AlertMessage))
+    {
+        <div class="alert-banner d-flex justify-content-between align-items-center flex-wrap gap-2 p-3 mb-4">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-check-circle-fill text-primary me-3 fs-5"></i>
+                <div class="small">@Model.AlertMessage</div>
+            </div>
+            <a asp-controller="Resident" asp-action="Requests" class="view-request-link text-primary text-decoration-none fw-bold small">View request <i class="bi bi-arrow-right"></i></a>
+        </div>
+    }
+
+    <!-- Stat Summary Cards (Bootstrap 5 grid, live dynamic counts) -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="stat-card p-3 d-flex align-items-center gap-3 rounded-3 shadow-sm bg-white">
+                <div class="stat-icon bg-warning-light"><i class="bi bi-clock-history text-warning"></i></div>
+                <div>
+                    <h3 class="mb-0 fw-bold">@(Model?.PendingRequestsCount ?? 0)</h3>
+                    <p class="stat-label mb-0 small fw-bold">Pending requests</p>
+                    <small class="text-muted">Awaiting barangay review</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="stat-card p-3 d-flex align-items-center gap-3 rounded-3 shadow-sm bg-white">
+                <div class="stat-icon bg-success-light"><i class="bi bi-file-earmark-check text-success"></i></div>
+                <div>
+                    <h3 class="mb-0 fw-bold">@(Model?.ReadyForPickupCount ?? 0)</h3>
+                    <p class="stat-label mb-0 small fw-bold">Ready for pickup</p>
+                    <small class="text-muted">Ready at the barangay hall</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Split Grid: wider feed + full-height announcements -->
+    <div class="row g-4 align-items-stretch">
+        <!-- Left Column: My Requests Table -->
+        <div class="col-xl-9">
+            <div class="card shadow-sm rounded-3 mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <h5 class="card-title mb-0 fw-bold">My requests</h5>
+                        <a asp-controller="Resident" asp-action="Requests" class="text-primary text-decoration-none fw-bold small">View all <i class="bi bi-arrow-right"></i></a>
+                    </div>
+                    <p class="text-muted small mb-3">Track your latest document and certificate requests.</p>
+
+                    <div class="table-responsive">
+                        @if (Model?.RecentRequests == null || !Model.RecentRequests.Any())
+                        {
+                            <div class="notice-box">No requests yet. Use <strong>Request Document</strong> to submit your first document.</div>
+                        }
+                        else
+                        {
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr class="text-uppercase text-muted" style="font-size: 0.7rem;">
+                                        <th>Document / Request No.</th>
+                                        <th>Submitted</th>
+                                        <th>Status</th>
+                                        <th class="text-end">View</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var req in Model.RecentRequests)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <a asp-controller="Resident" asp-action="Requests" class="request-row-link text-body">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <span class="doc-icon-tile"><i class="bi bi-file-earmark-text"></i></span>
+                                                        <span>
+                                                            <span class="fw-bold d-block">@req.DocumentName</span>
+                                                            <small class="text-muted">@req.RequestNo &bull; @req.Purpose</small>
+                                                        </span>
+                                                    </div>
+                                                </a>
+                                            </td>
+                                            <td class="small text-muted">@req.SubmittedDate</td>
+                                            <td><span class="@StatusBadgeClass(req.Status)">@StatusLabel(req.Status)</span></td>
+                                            <td class="text-end">
+                                                <a asp-controller="Resident" asp-action="Requests" class="btn btn-sm btn-light" title="View request"><i class="bi bi-chevron-right"></i></a>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                    <div class="notice-box mt-3">
+                        <i class="bi bi-info-circle me-2"></i> Processing time varies by document. Check each request for updates.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Announcements -->
+        <div class="col-xl-3">
+            <div class="card shadow-sm rounded-3 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold mb-0">Announcements</h6>
+                        <a asp-controller="Resident" asp-action="Announcements" class="text-primary text-decoration-none small fw-bold">View all <i class="bi bi-arrow-right"></i></a>
+                    </div>
+
+                    @if (Model?.Announcements == null || !Model.Announcements.Any())
+                    {
+                        <p class="text-muted small mb-0">No announcements yet.</p>
+                    }
+                    else
+                    {
+                        foreach (var ann in Model.Announcements)
+                        {
+                            var badge = SplitDateBadge(ann);
+                            <div class="announcement-item border-bottom pb-3 mb-3">
+                                <div class="d-flex">
+                                    <div class="date-badge me-3">
+                                        <span class="month">@badge.Month</span>
+                                        <span class="day">@badge.Day</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1 fw-bold" style="font-size: 0.9rem;">@ann.Title</h6>
+                                        <p class="text-muted small mb-1">@ann.Description</p>
+                                        <small class="text-muted" style="font-size: 0.75rem;">@ann.Category &bull; @ann.FullDate</small>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

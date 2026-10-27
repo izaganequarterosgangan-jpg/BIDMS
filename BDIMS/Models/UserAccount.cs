@@ -64,6 +64,43 @@ namespace BDIMS.Models
         [MaxLength(128)]
         public string LastName { get; set; } = string.Empty;
 
+        /// <summary>Middle name captured at registration (e.g. "Santos"). Optional.</summary>
+        [MaxLength(128)]
+        public string? MiddleName { get; set; }
+
+        /// <summary>Generational suffix captured at registration (e.g. "Jr.", "III"). Optional.</summary>
+        [MaxLength(16)]
+        public string? Suffix { get; set; }
+
+        /// <summary>Age declared at registration. Informational only; never used for access control.</summary>
+        public int? Age { get; set; }
+
+        /// <summary>Sex declared at registration ("Male" / "Female"). Editable from My Profile.</summary>
+        [MaxLength(16)]
+        public string Gender { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Date of birth captured from My Profile. Informational only; never used for
+        /// access control. Optional so accounts created before the field existed stay
+        /// valid and the resident can fill it in later.
+        /// </summary>
+        public DateTime? DateOfBirth { get; set; }
+
+        /// <summary>
+        /// Civil status captured from My Profile (e.g. "Single", "Married"). Optional;
+        /// validated against a fixed list before it is written.
+        /// </summary>
+        [MaxLength(32)]
+        public string CivilStatus { get; set; } = string.Empty;
+
+        /// <summary>Purok / zone of residence (e.g. "Purok 2").</summary>
+        [MaxLength(64)]
+        public string Purok { get; set; } = string.Empty;
+
+        /// <summary>Voter status declared at registration ("Registered Voter" / "Non-Voter").</summary>
+        [MaxLength(32)]
+        public string VoterStatus { get; set; } = string.Empty;
+
         /// <summary>
         /// Office identifier issued by the barangay (e.g. "EMP-0015"). Presentation
         /// only, so it is not unique-enforced; it is shown on the profile card.
@@ -83,6 +120,18 @@ namespace BDIMS.Models
         [Required]
         [MaxLength(128)]
         public string Role { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Whether the resident wants to receive request update notifications.
+        /// Defaults to true so new accounts are opted-in by default.
+        /// </summary>
+        public bool NotifyRequestUpdates { get; set; } = true;
+
+        /// <summary>
+        /// Whether the resident wants to receive barangay announcement notifications.
+        /// Defaults to true so new accounts are opted-in by default.
+        /// </summary>
+        public bool NotifyAnnouncements { get; set; } = true;
 
         /// <summary>
         /// Avatar badge text (e.g. "IQ"). Persisted rather than recomputed per request so
@@ -117,8 +166,82 @@ namespace BDIMS.Models
         /// </summary>
         public bool IsAdmin { get; set; }
 
-        /// <summary>Inactive accounts are refused at sign-in without being deleted.</summary>
-        public bool IsActive { get; set; } = true;
+        /// <summary>
+        /// Inactive accounts are refused at sign-in without being deleted.
+        ///
+        /// Kept for compatibility with code and seeded rows that predate
+        /// <see cref="Status"/>; it is a mirror of it rather than an independent
+        /// switch: <see cref="ApplyStatus"/> writes both together, and every reader
+        /// (login, the user list) treats <see cref="Status"/> as the source of truth.
+        /// New registrations default to pending approval (inactive) so an
+        /// administrator must approve them before they can sign in.
+        /// </summary>
+        public bool IsActive { get; set; } = false;
+
+        /// <summary>
+        /// Registration/access lifecycle: <see cref="UserAccountStatus.Pending"/>,
+        /// <see cref="UserAccountStatus.Active"/>, <see cref="UserAccountStatus.Rejected"/>,
+        /// <see cref="UserAccountStatus.Blocked"/> or <see cref="UserAccountStatus.Deactivated"/>.
+        /// Only <c>Active</c> may sign in. New user registrations default to <c>Pending</c>
+        /// so they require admin approval.
+        /// </summary>
+        public UserAccountStatus Status { get; set; } = UserAccountStatus.Pending;
+
+        /// <summary>
+        /// Moment (UTC) a temporary block set by an administrator expires, or
+        /// <c>null</c> when the account is not blocked. Set together with
+        /// <see cref="Status"/> = <see cref="UserAccountStatus.Blocked"/> and cleared
+        /// by <see cref="ApplyStatus"/> as soon as the status moves on, so the column
+        /// never disagrees with the status the UI renders.
+        /// </summary>
+        public DateTime? LockoutEnd { get; set; }
+
+        /// <summary>
+        /// Free-text note the administrator typed when blocking the account
+        /// (e.g. "shared workstation misuse"). Optional; shown in the user list and
+        /// in the block modal so the reason survives the conversation it came from.
+        /// </summary>
+        [MaxLength(256)]
+        public string? LockoutReason { get; set; }
+
+        /// <summary>
+        /// A temporary block whose expiry has not been reached yet.
+        /// </summary>
+        public bool IsLockActive =>
+            Status == UserAccountStatus.Blocked
+            && LockoutEnd.HasValue
+            && LockoutEnd.Value > DateTime.UtcNow;
+
+        /// <summary>
+        /// A temporary block whose expiry has passed but whose row has not been
+        /// rewritten yet - the account is due to become <see cref="UserAccountStatus.Active"/>
+        /// again. Login and the user list both call <see cref="ApplyStatus"/> when they
+        /// see this, so no background job is needed for the block to lift on time.
+        /// </summary>
+        public bool HasExpiredLock =>
+            Status == UserAccountStatus.Blocked
+            && LockoutEnd.HasValue
+            && LockoutEnd.Value <= DateTime.UtcNow;
+
+        /// <summary>
+        /// Moves the account to <paramref name="status"/> and keeps the legacy
+        /// <see cref="IsActive"/> flag and the temporary-lock columns consistent with
+        /// it, so no reader can be left with a half-updated account: a blocked or
+        /// rejected account is never sign-in-able through the old flag, and a
+        /// lingering <see cref="LockoutEnd"/> can never re-block an account that has
+        /// already been approved again.
+        /// </summary>
+        public void ApplyStatus(UserAccountStatus status)
+        {
+            Status = status;
+            IsActive = status == UserAccountStatus.Active;
+
+            if (status != UserAccountStatus.Blocked)
+            {
+                LockoutEnd = null;
+                LockoutReason = null;
+            }
+        }
 
         /// <summary>Creation timestamp (UTC), for audit purposes.</summary>
         public DateTime CreatedUtc { get; set; }

@@ -1,0 +1,1003 @@
+@model BDIMS.Models.ResidentDashboardViewModel
+@{
+    ViewData["Title"] = "My Requests";
+    Layout = "_ResidentLayout";
+
+    var requests = Model?.RecentRequests ?? new List<BDIMS.Models.ResidentRequestItem>();
+    var headerDate = DateTime.Now.ToString("dddd, MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+    var fullName = string.IsNullOrWhiteSpace(Model?.ResidentName) ? "Resident" : Model.ResidentName;
+    var initials = BDIMS.Services.UserClaims.GetInitials(User);
+    var allCount = requests.Count;
+    var pendingCount = Model?.PendingRequestsCount ?? 0;
+    var readyCount = Model?.ReadyForPickupCount ?? 0;
+    var rejectedCount = requests.Count(r => IsRejected(r.Status));
+    var certificateTypes = Model?.AvailableCertificateTypes ?? new List<BDIMS.Models.CertificateRule>();
+    var paymentMethodName = (ViewBag.PaymentMethodName as string) ?? "GCash";
+
+    bool IsRejected(string? status)
+    {
+        var value = (status ?? string.Empty).Trim();
+        return value.Equals("Rejected", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("Declined", StringComparison.OrdinalIgnoreCase);
+    }
+
+    bool IsCancelled(string? status)
+    {
+        var value = (status ?? string.Empty).Trim();
+        return value.Equals("Cancelled", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("Canceled", StringComparison.OrdinalIgnoreCase);
+    }
+
+    string StatusClass(string? status)
+    {
+        if (IsRejected(status)) return "request-status-rejected";
+        if (IsCancelled(status)) return "request-status-cancelled";
+        var value = (status ?? string.Empty).Trim().ToLowerInvariant();
+        return value is "ready for pickup" or "approved" or "ready" or "ready for download" ? "request-status-ready"
+            : value is "pending" or "in review" or "processing" ? "request-status-pending"
+            : "request-status-issued";
+    }
+
+    string StatusLabel(string? status)
+    {
+        var value = (status ?? string.Empty).Trim();
+        if (string.Equals(value, "Approved", StringComparison.OrdinalIgnoreCase)) return "Ready for pickup";
+        if (string.Equals(value, "Released", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "Completed", StringComparison.OrdinalIgnoreCase)) return "Issued";
+        return string.IsNullOrWhiteSpace(value) ? "Pending" : value;
+    }
+}
+
+<style>
+    .resident-requests-page { width: 100%; max-width: 1440px; margin: 0 auto; }
+    /* Fee badge under the Document Type select: shows the admin-configured fee
+       for the chosen certificate (e.g. "₱ 50.00") in 2 decimals. */
+    .certificate-fee-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 6px 12px;
+        background: #ecfdf5;
+        color: #047857;
+        border: 1px solid #d1fae5;
+        border-radius: 999px;
+        font-size: .78rem;
+        font-weight: 600;
+    }
+    .certificate-fee-badge i { font-size: .9rem; }
+    .resident-requests-page .requests-eyebrow { color: #2563eb; font-size: .7rem; font-weight: 800; letter-spacing: .1em; }
+    .resident-requests-page .request-card { background: #fff; border: 1px solid #e9ecef; border-radius: 12px; box-shadow: 0 2px 8px rgba(15,23,42,.04); }
+    .resident-requests-page .metric-card { height: 100%; padding: 1rem; display: flex; align-items: center; gap: .8rem; }
+    .resident-requests-page .metric-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+    .resident-requests-page .metric-icon.pending { background: #fef3c7; color: #b45309; }
+    .resident-requests-page .metric-icon.ready { background: #d1fae5; color: #047857; }
+    .resident-requests-page .metric-icon.issued { background: #dbeafe; color: #1d4ed8; }
+    .resident-requests-page .metric-count { color: #0f172a; font-size: 1.45rem; font-weight: 800; line-height: 1; }
+    .resident-requests-page .metric-title { color: #0f172a; font-size: .82rem; font-weight: 800; }
+    .resident-requests-page .metric-subtitle { color: #64748b; font-size: .72rem; }
+    .resident-requests-page .request-alert { background: #eef4ff; border: 1px solid #cfe0ff; border-radius: 12px; color: #1e3a8a; }
+    .resident-requests-page .request-alert i { font-size: 1.25rem; }
+    .resident-requests-page .toolbar-search { max-width: 330px; }
+    .resident-requests-page .filter-pill { border-radius: 999px; font-size: .75rem; font-weight: 700; white-space: nowrap; }
+    .resident-requests-page .filter-pill.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .resident-requests-page .request-table th { color: #64748b; font-size: .68rem; letter-spacing: .06em; white-space: nowrap; }
+    .resident-requests-page .request-table td { padding-top: 1rem; padding-bottom: 1rem; }
+    .resident-requests-page .document-icon { width: 38px; height: 38px; border-radius: 10px; background: #eef2ff; color: #4f46e5; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .resident-requests-page .request-title { color: #0f172a; font-weight: 800; }
+    .resident-requests-page .request-meta { color: #64748b; font-size: .72rem; }
+    .resident-requests-page .request-status { border-radius: 999px; padding: .3rem .65rem; font-size: .7rem; font-weight: 800; white-space: nowrap; }
+    .resident-requests-page .request-status-ready { background: #d1fae5; color: #047857; }
+    .resident-requests-page .request-status-pending { background: #fef3c7; color: #b45309; }
+    .resident-requests-page .request-status-issued { background: #dbeafe; color: #1d4ed8; }
+    .resident-requests-page .request-status-rejected { background: #fee2e2; color: #b91c1c; }
+    .resident-requests-page .request-status-cancelled { background: #f1f5f9; color: #475569; }
+    /* Red dot over the feedback icon: the secretary replied and the resident has
+       not opened the feedback yet. Removed from the DOM once they open it. */
+    .resident-requests-page .unread-reply-badge { width: 9px; height: 9px; padding: 0; font-size: 0; line-height: 0; }
+    .resident-requests-page .details-link { color: #2563eb; font-size: .78rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+    .resident-requests-page .details-link:hover { color: #1d4ed8; text-decoration: underline; }
+    .resident-requests-page .instruction-card { height: 100%; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.1rem; }
+    .resident-requests-page .instruction-card h3 { color: #0f172a; font-size: .95rem; font-weight: 800; }
+    .resident-requests-page .instruction-card p { color: #64748b; font-size: .8rem; line-height: 1.55; margin-bottom: 0; }
+    .resident-requests-page .empty-state { color: #64748b; padding: 2rem 1rem; text-align: center; }
+    @@media (max-width: 767.98px) {
+        .resident-requests-page .toolbar-search { max-width: none; width: 100%; }
+        .resident-requests-page .filter-pills { overflow-x: auto; flex-wrap: nowrap !important; padding-bottom: .25rem; }
+    }
+</style>
+
+<div class="resident-requests-page">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <div>
+            <h1 class="h3 fw-bold mb-1">My requests</h1>
+            <p class="text-muted small mb-0">@headerDate · Bohol</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <form asp-controller="Resident" asp-action="Requests" method="get" class="resident-search d-flex align-items-center gap-2 bg-white border rounded-3 px-2 py-1">
+                <i class="bi bi-search text-muted"></i>
+                <input name="searchQuery" class="form-control form-control-sm border-0 shadow-none" placeholder="Search services..." style="width:175px;" />
+            </form>
+            @await Html.PartialAsync("_NotificationBell")
+            <a asp-controller="Resident" asp-action="Profile" class="resident-avatar" title="@fullName">@initials</a>
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <div class="requests-eyebrow text-uppercase mb-1">YOUR DOCUMENT REQUESTS</div>
+        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3">
+            <div>
+                <h2 class="h2 fw-bold mb-2">Track your requests</h2>
+                <p class="text-muted mb-0">View the status of every document you have requested from your barangay.</p>
+            </div>
+            <button type="button" class="btn btn-primary fw-bold" data-bs-toggle="collapse" data-bs-target="#newRequestPanel" aria-expanded="false" aria-controls="newRequestPanel">+ Request Document</button>
+        </div>
+    </div>
+
+    @if (TempData["Success"] is string successMessage)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">@successMessage<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>
+    }
+    @if (TempData["Error"] is string errorMessage)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">@errorMessage<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>
+    }
+
+    <div class="collapse mb-4" id="newRequestPanel">
+        <div class="request-card p-4">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                    <h3 class="h5 fw-bold mb-1">Submit a new document request</h3>
+                    <p class="text-muted small mb-3">Choose a document and provide the purpose for your barangay review.</p>
+                </div>
+                <button type="button"
+                        class="btn btn-outline-primary btn-sm mb-3"
+                        id="autofillProfileBtn"
+                        data-profile-name="@(ViewData["ProfileFullName"])"
+                        data-profile-age="@(ViewData["ProfileAge"])"
+                        data-profile-purok="@(ViewData["ProfilePurok"])"
+                        data-profile-address="@(ViewData["ProfileAddress"])"
+                        title="Fill the name, age, purok and address fields from your saved profile">
+                    <i class="bi bi-person-lines-fill me-1"></i>Autofill from profile
+                </button>
+            </div>
+            <form asp-controller="Resident" asp-action="SubmitRequest" method="post" class="row g-3">
+                @Html.AntiForgeryToken()
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold" for="residentName">Resident name</label>
+                    <input class="form-control" id="residentName" value="@Model?.ResidentName" readonly />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold" for="residentAge">Age</label>
+                    <input type="number" name="Age" class="form-control" id="residentAge" value="@(Model?.Age?.ToString() ?? string.Empty)" placeholder="e.g. 25" min="0" max="150" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold" for="residentPurok">Purok</label>
+                    <input name="Purok" class="form-control" id="residentPurok" value="@Model?.Purok" placeholder="e.g. Purok 2" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold" for="residentAddress">Address</label>
+                    <input name="Address" class="form-control" id="residentAddress" value="@Model?.RegisteredAddress" placeholder="e.g. Governor Boyles, Ubay, Bohol" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold" for="documentType">Document type</label>
+                    <select class="form-select" name="DocumentType" id="documentType" required onchange="updateCertificateFee(this)">
+                        <option value="" data-fee="">Choose a document</option>
+                        @foreach (var certificate in (ViewBag.Certificates as List<BDIMS.Models.CertificateRule>) ?? certificateTypes)
+                        {
+                            <option value="@certificate.Type" data-fee="@certificate.Fee.ToString("F2")">@certificate.Type</option>
+                        }
+                    </select>
+                    @* Fee badge: shows the exact admin-configured fee for the chosen
+                       certificate (e.g. "₱ 50.00") in 2 decimals. Hidden until a
+                       document is selected; updateCertificateFee() drives it. *@
+                    <div id="certificateFeeBadge" class="certificate-fee-badge" style="display:none;">
+                        <i class="bi bi-cash-coin"></i>
+                        <span>Fee: <strong id="certificateFeeText">₱ 0.00</strong></span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold" for="purposeCategory">Purpose category</label>
+                    <select class="form-select" name="PurposeCategory" id="purposeCategory" required>
+                        <option value="">Choose a category</option>
+                        <option>Employment</option>
+                        <option>Scholarship / School Requirement</option>
+                        <option>Medical Assistance</option>
+                        <option>Financial Assistance</option>
+                        <option>Business / Legal</option>
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-bold" for="purpose">Specific remarks</label>
+                    <textarea class="form-control" name="SpecificRemarks" id="purpose" rows="3" placeholder="Describe the purpose of your request..."></textarea>
+                </div>
+                @* Claim format: how the resident wants to receive the document.
+                   Bound to DocumentRequestModel.FulfillmentMode; the controller
+                   normalizes anything unexpected to the printed hard copy. *@
+                <div class="col-12">
+                    <label class="form-label small fw-bold">Claim format</label>
+                    <div class="d-flex flex-column gap-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="FulfillmentMode" id="fulfillmentDigital" value="Digital Soft Copy" required>
+                            <label class="form-check-label" for="fulfillmentDigital">
+                                <strong>Digital Soft Copy</strong> — downloadable PDF, for remote residents.
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="FulfillmentMode" id="fulfillmentPrinted" value="Printed Hard Copy" required>
+                            <label class="form-check-label" for="fulfillmentPrinted">
+                                <strong>Printed Hard Copy</strong> — in-person pickup at the Barangay Hall.
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-light border" data-bs-toggle="collapse" data-bs-target="#newRequestPanel">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Request <i class="bi bi-arrow-right ms-1"></i></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6"><div class="request-card metric-card"><div class="metric-icon pending"><i class="bi bi-clock-history"></i></div><div><div class="metric-count">@pendingCount</div><div class="metric-title">Pending requests</div><div class="metric-subtitle">Awaiting barangay review</div></div></div></div>
+        <div class="col-md-6"><div class="request-card metric-card"><div class="metric-icon ready"><i class="bi bi-file-earmark-check"></i></div><div><div class="metric-count">@readyCount</div><div class="metric-title">Ready for pickup</div><div class="metric-subtitle">Your clearance is ready</div></div></div></div>
+    </div>
+
+    @if (Model?.HasActiveAlert == true && !string.IsNullOrWhiteSpace(Model.AlertMessage))
+    {
+        <div class="request-alert p-3 mb-4 d-flex align-items-start gap-3">
+            <i class="bi bi-check-circle-fill"></i>
+            <div><strong class="d-block">@Model.AlertMessage.Split(". Bring", StringSplitOptions.None)[0].Trim().TrimEnd('.') .</strong><span class="small">Bring a valid ID and your request number to the barangay hall during office hours.</span></div>
+        </div>
+    }
+
+    <div class="request-card p-3 p-lg-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+            <h3 class="h5 fw-bold mb-0">All requests</h3>
+            <div class="input-group input-group-sm toolbar-search">
+                <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                <input id="requestSearch" type="search" class="form-control" placeholder="Search document or request number" aria-label="Search document or request number" />
+            </div>
+        </div>
+        <div class="filter-pills d-flex gap-2 mb-3" role="group" aria-label="Filter requests by status">
+            <button type="button" class="btn btn-sm filter-pill active" data-filter="all">All (@allCount)</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary filter-pill" data-filter="pending">Pending (@pendingCount)</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary filter-pill" data-filter="ready">Ready for pickup (@readyCount)</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary filter-pill" data-filter="rejected">Rejected (@rejectedCount)</button>
+        </div>
+
+        @if (!requests.Any())
+        {
+            <div class="empty-state"><i class="bi bi-file-earmark-text fs-2 d-block mb-2"></i>No requests yet. Use <strong>Request Document</strong> to submit your first document.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table request-table align-middle mb-0" id="requestsTable">
+                    <thead><tr><th>DOCUMENT / REQUEST NO.</th><th>PURPOSE</th><th>SUBMITTED</th><th>STATUS</th><th>INBOX / ATTACHMENT</th><th class="text-end">ACTION</th></tr></thead>
+                    <tbody>
+                    @foreach (var request in requests)
+                    {
+                        var label = StatusLabel(request.Status);
+                        var filter = label.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? "pending" : label.Equals("Ready for pickup", StringComparison.OrdinalIgnoreCase) ? "ready" : (IsRejected(request.Status) || IsCancelled(request.Status)) ? "rejected" : "issued";
+                        var canEdit = string.Equals(request.Status, "Pending", StringComparison.OrdinalIgnoreCase);
+                        var canDownload = string.Equals(request.Status, "Ready for download", StringComparison.OrdinalIgnoreCase)
+                            && !string.IsNullOrWhiteSpace(request.DocumentPdfUrl);
+                        var isCancelled = IsCancelled(request.Status);
+                        <tr data-status="@filter" data-search="@($"{request.DocumentName} {request.RequestNo} {request.Purpose} {label}")">
+                            <td><div class="d-flex align-items-center gap-2"><span class="document-icon"><i class="bi bi-file-earmark-text"></i></span><div><div class="request-title">@request.DocumentName</div><div class="request-meta">@request.RequestNo</div></div></div></td>
+                            <td class="small text-muted">@(string.IsNullOrWhiteSpace(request.Purpose) ? "—" : request.Purpose)</td>
+                            <td class="small text-muted">@request.SubmittedDate</td>
+                            <td><span class="request-status @StatusClass(request.Status)">@label</span></td>
+                            <td>
+                                @if (isCancelled)
+                                {
+                                    @* Cancelled requests keep the row for the record, but the
+                                       inbox is closed: no barangay updates will arrive and no
+                                       attachment can be claimed. *@
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled
+                                            title="Inbox is unavailable for cancelled requests"
+                                            aria-label="Inbox unavailable for cancelled @request.DocumentName request">
+                                        <i class="bi bi-inbox me-1"></i>Inbox
+                                    </button>
+                                }
+                                else if (string.IsNullOrWhiteSpace(request.DocumentPdfUrl))
+                                {
+                                    <button type="button" class="btn btn-sm btn-primary"
+                                            data-request-no="@request.RequestNo"
+                                            data-document="@request.DocumentName"
+                                            data-status="@label"
+                                            data-certificate-note="@request.CertificateNote"
+                                            onclick="openResidentInboxModal(this)">
+                                        <i class="bi bi-inbox-fill me-1"></i>Inbox
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-sm btn-primary"
+                                            data-request-no="@request.RequestNo"
+                                            data-document="@request.DocumentName"
+                                            data-status="@label"
+                                            data-certificate-note="@request.CertificateNote"
+                                            data-pdf-url="@request.DocumentPdfUrl"
+                                            onclick="openResidentInboxModal(this)">
+                                        <i class="bi bi-inbox-fill me-1"></i>Inbox
+                                    </button>
+                                }
+                            </td>
+                            <td class="text-end">
+                                @if (isCancelled)
+                                {
+                                    @* A cancelled request is dead paperwork: every workflow
+                                       action is withdrawn and the resident's only remaining
+                                       choice is to clear the row from their list. *@
+                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                            title="Delete this cancelled request"
+                                            aria-label="Delete cancelled @request.DocumentName request"
+                                            data-request-no="@request.RequestNo"
+                                            data-document="@request.DocumentName"
+                                            onclick="deleteResidentRequest(this)">
+                                        <i class="bi bi-trash me-1"></i>Delete
+                                    </button>
+                                }
+                                else
+                                {
+                                    <div class="d-inline-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-sm btn-success"
+                                                data-document="@request.DocumentName"
+                                                data-request-no="@request.RequestNo"
+                                                onclick="openPaymentModal(this)">Payment</button>
+                                        <button type="button" class="btn btn-sm btn-outline-light"
+                                                title="View barangay feedback"
+                                                aria-label="View feedback for @request.DocumentName request"
+                                                data-request-no="@request.RequestNo"
+                                                data-status="@label"
+                                                data-admin-reply="@request.AdminReply"
+                                                onclick="openResidentPaymentStatusModal(this)">
+                                            <span class="position-relative d-inline-block">
+                                                <i class="bi bi-chat-left-text text-primary"></i>
+                                                @if (request.HasUnreadReply)
+                                                {
+                                                    <span class="unread-reply-badge badge bg-danger rounded-circle position-absolute top-0 start-100 translate-middle" aria-label="Unread reply from the Barangay Secretary"></span>
+                                                }
+                                            </span>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-light"
+                                                title="@(canEdit ? "Edit request" : "Only pending requests can be edited")"
+                                                aria-label="Edit @request.DocumentName request"
+                                                data-request-id="@request.RequestNo"
+                                                data-purpose-category="@request.PurposeCategory"
+                                                data-specific-remarks="@request.SpecificRemarks"
+                                                data-claim-format="@request.ClaimFormat"
+                                                data-status="@request.Status"
+                                                onclick="openEditRequestModal(this)"
+                                                disabled="@(!canEdit)">
+                                            <i class="bi bi-pencil-square text-info"></i>
+                                        </button>
+                                        @if (canEdit)
+                                        {
+                                            @* Withdrawal is only offered while the request is still
+                                               Pending; once the barangay starts processing it, the
+                                               resident can no longer cancel from this screen. *@
+                                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                                    title="Cancel this request"
+                                                    aria-label="Cancel @request.DocumentName request"
+                                                    data-request-no="@request.RequestNo"
+                                                    data-document="@request.DocumentName"
+                                                    onclick="cancelResidentRequest(this)">
+                                                <i class="bi bi-x-circle me-1"></i>Cancel
+                                            </button>
+                                        }
+                                        @if (canDownload)
+                                        {
+                                            <a class="btn btn-sm btn-primary"
+                                               href="@request.DocumentPdfUrl"
+                                               download
+                                               title="Download the digital copy of @request.DocumentName">
+                                                <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+                                            </a>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-flex justify-content-between flex-wrap gap-2 border-top mt-3 pt-3 text-muted small"><span id="requestCountText">Showing 1-@allCount of @allCount requests</span><span>Only your personal requests are shown.</span></div>
+        }
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6"><div class="instruction-card"><h3><i class="bi bi-info-circle text-primary me-2"></i>What happens next?</h3><p>Pending requests are awaiting barangay review. Processing time varies by document. Open a request to check its progress and pickup instructions.</p></div></div>
+        <div class="col-lg-6"><div class="instruction-card"><h3><i class="bi bi-building text-primary me-2"></i>Collecting a document</h3><p>Wait until your request is marked Ready for pickup. Visit the barangay hall Mon–Fri, 8:00 AM–5:00 PM, with your valid ID and request number.</p></div></div>
+    </div>
+</div>
+
+<!-- ===== Payment Modal ===== -->
+<div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="paymentModalLabel">
+                    <i class="bi bi-phone me-2"></i>Pay via @paymentMethodName
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-controller="Resident" asp-action="SubmitPaymentProof" method="post" enctype="multipart/form-data" id="paymentProofForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="requestId" id="paymentProofRequestId" />
+                <div class="modal-body">
+                    <p class="small text-muted" id="paymentRequestLabel"></p>
+                    <div class="text-center mb-3">
+                        <img id="paymentQrImage" alt="@paymentMethodName QR code"
+                             class="img-fluid border rounded-3 mx-auto" style="max-width: 260px; display: none;" />
+                        <div id="paymentQrMissing" class="alert alert-warning small mb-0">
+                            No @paymentMethodName QR code has been uploaded by the barangay yet.
+                        </div>
+                    </div>
+                    <div class="border rounded-3 p-3 bg-light">
+                        <div class="d-flex justify-content-between gap-3 mb-2">
+                            <span class="text-muted small">Account name</span>
+                            <strong class="small text-end" id="paymentAccountName">@ViewBag.GCashAccountName</strong>
+                        </div>
+                        <div class="d-flex justify-content-between gap-3">
+                            <span class="text-muted small">Mobile number</span>
+                            <strong class="small text-end" id="paymentAccountNumber">@ViewBag.GCashAccountNumber</strong>
+                        </div>
+                    </div>
+                    <p class="small text-muted mt-3 mb-0">
+                        Scan the QR code or send the exact amount using @paymentMethodName to the account above, then keep your receipt for verification.
+                    </p>
+
+                    <hr class="my-3" />
+                    <h6 class="fw-bold mb-3">Submit payment proof</h6>
+                    <div class="mb-3">
+                        <label for="paymentReferenceNumber" class="form-label small fw-semibold">@paymentMethodName Reference Number</label>
+                        <input type="text" class="form-control" id="paymentReferenceNumber"
+                               name="referenceNumber" maxlength="50" autocomplete="off" required />
+                    </div>
+                    <div class="mb-3">
+                        <label for="paymentReceiptImage" class="form-label small fw-semibold">Attach Receipt Image</label>
+                        <input type="file" class="form-control" id="paymentReceiptImage"
+                               name="receiptImage" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" required />
+                    </div>
+                    <div class="mb-0">
+                        <label for="paymentNote" class="form-label small fw-semibold">Short Note</label>
+                        <input type="text" class="form-control" id="paymentNote"
+                               name="paymentNote" maxlength="120" placeholder="Max 1 sentence" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check2-circle me-1"></i>Submit Payment Proof
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Request Status / Admin Reply Modal ===== -->
+<div class="modal fade" id="residentPaymentStatusModal" tabindex="-1" aria-labelledby="residentPaymentStatusModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="residentPaymentStatusModalLabel">
+                    <i class="bi bi-chat-left-text me-2"></i>Barangay Feedback
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between gap-3 mb-2">
+                    <span class="text-muted small">Request</span>
+                    <strong class="small text-end" id="resModalRequestNo"></strong>
+                </div>
+                <div class="d-flex justify-content-between gap-3 mb-3">
+                    <span class="text-muted small">Status</span>
+                    <strong class="small text-end" id="resModalStatus"></strong>
+                </div>
+                <label class="form-label small fw-semibold">Reply from the Barangay Secretary</label>
+                <div id="resModalAdminReply"
+                     class="border rounded-3 p-3 bg-light small"
+                     style="white-space: pre-wrap; min-height: 90px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Edit Request Modal ===== -->
+<div class="modal fade" id="editRequestModal" tabindex="-1" aria-labelledby="editRequestModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editRequestModalLabel">
+                    <i class="bi bi-pencil-square me-2"></i>Edit Pending Request
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-controller="Resident" asp-action="UpdateRequest" method="post" id="editRequestForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="requestId" id="editRequestId" />
+                <div class="modal-body">
+                    <p class="small text-muted" id="editRequestLabel"></p>
+                    <div class="mb-3">
+                        <label for="editPurposeCategory" class="form-label small fw-semibold">Purpose Category</label>
+                        <select class="form-select" id="editPurposeCategory" name="purposeCategory" required>
+                            <option value="">Choose a category</option>
+                            <option>Employment</option>
+                            <option>Scholarship / School Requirement</option>
+                            <option>Medical Assistance</option>
+                            <option>Financial Assistance</option>
+                            <option>Business / Legal</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editSpecificRemarks" class="form-label small fw-semibold">Specific Remarks</label>
+                        <textarea class="form-control" id="editSpecificRemarks" name="specificRemarks" rows="3"
+                                  placeholder="Describe the purpose of your request..."></textarea>
+                    </div>
+                    <div class="mb-0">
+                        <label for="editClaimFormat" class="form-label small fw-semibold">Claim Format</label>
+                        <select class="form-select" id="editClaimFormat" name="claimFormat" required>
+                            <option value="Digital Soft Copy">Digital Soft Copy</option>
+                            <option value="Printed Hard Copy">Printed Hard Copy</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check2 me-1"></i>Save Changes
+                    </button>
+                </div>
+            </form>
+</div>
+</div>
+</div>
+
+<!-- ===== Resident Inbox Modal ===== -->
+<div class="modal fade" id="residentInboxModal" tabindex="-1" aria-labelledby="residentInboxModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="residentInboxModalLabel">
+                    <i class="bi bi-inbox-fill me-2"></i>Inbox / Attachment
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between gap-3 mb-2">
+                    <span class="text-muted small">Request</span>
+                    <strong class="small text-end" id="inboxModalRequestNo"></strong>
+                </div>
+                <div class="d-flex justify-content-between gap-3 mb-3">
+                    <span class="text-muted small">Status</span>
+                    <strong class="small text-end" id="inboxModalStatus"></strong>
+                </div>
+<label class="form-label small fw-semibold">Certificate Note</label>
+                 <div id="inboxModalAdminReply"
+                      class="border rounded-3 p-3 bg-light small mb-3"
+                      style="white-space: pre-wrap; min-height: 90px;"></div>
+                <div id="inboxPdfContainer" class="border rounded-3 overflow-hidden" style="display: none;">
+                    <iframe id="inboxPdfFrame"
+                            class="w-100"
+                            style="height: 500px; border: none;"
+                            title="Document PDF Preview">
+                    </iframe>
+                </div>
+                <div id="inboxNoPdf" class="text-center py-4 text-muted" style="display: none;">
+                    <i class="bi bi-file-earmark-x fs-1 d-block mb-2"></i>
+                    No PDF attachment available for this request.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <a id="inboxDownloadBtn" class="btn btn-primary" href="#" download style="display: none;">
+                    <i class="bi bi-download me-1"></i>Download PDF
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openResidentInboxModal(button) {
+        var modalEl = document.getElementById('residentInboxModal');
+        if (!modalEl) return;
+
+        var requestNo = button.getAttribute('data-request-no') || '';
+        var documentName = button.getAttribute('data-document') || '';
+        var status = button.getAttribute('data-status') || '';
+        var certificateNote = (button.getAttribute('data-certificate-note') || '').trim();
+        var pdfUrl = button.getAttribute('data-pdf-url') || '';
+
+        document.getElementById('inboxModalRequestNo').textContent = requestNo || '-';
+        document.getElementById('inboxModalStatus').textContent = status || '-';
+        document.getElementById('inboxModalAdminReply').textContent =
+            certificateNote || 'No note from the Barangay Secretary.';
+
+        var pdfContainer = document.getElementById('inboxPdfContainer');
+        var pdfFrame = document.getElementById('inboxPdfFrame');
+        var noPdf = document.getElementById('inboxNoPdf');
+        var downloadBtn = document.getElementById('inboxDownloadBtn');
+
+        if (pdfUrl) {
+            pdfFrame.src = pdfUrl;
+            pdfContainer.style.display = 'block';
+            noPdf.style.display = 'none';
+            downloadBtn.href = pdfUrl;
+            downloadBtn.download = (documentName || 'document') + '.pdf';
+            downloadBtn.style.display = 'inline-flex';
+        } else {
+            pdfContainer.style.display = 'none';
+            noPdf.style.display = 'block';
+            downloadBtn.style.display = 'none';
+        }
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            new bootstrap.Modal(modalEl).show();
+        } else {
+            modalEl.classList.add('show');
+            modalEl.style.display = 'block';
+            modalEl.setAttribute('aria-hidden', 'false');
+        }
+    }
+
+    function openResidentPaymentStatusModal(button) {
+        var modalEl = document.getElementById('residentPaymentStatusModal');
+        if (!modalEl) return;
+
+        var requestNo = button.getAttribute('data-request-no') || '';
+        var status = button.getAttribute('data-status') || '';
+        var reply = (button.getAttribute('data-admin-reply') || '').trim();
+
+        document.getElementById('resModalRequestNo').textContent = requestNo || '-';
+        document.getElementById('resModalStatus').textContent = status || '-';
+        document.getElementById('resModalAdminReply').textContent =
+            reply || 'No reply from the Barangay Secretary yet.';
+
+        // Opening the feedback acknowledges the secretary's reply: drop the red dot
+        // straight away and clear the flag server-side so it stays gone until the
+        // secretary sends another update.
+        var badge = button.querySelector('.unread-reply-badge');
+        if (badge) {
+            badge.remove();
+        }
+        markReplyAsRead(requestNo);
+
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    // Tells the server the resident has read the secretary's reply. Fire-and-forget:
+    // a failed call must never keep the feedback modal from opening.
+    function markReplyAsRead(requestId) {
+        if (!requestId) return;
+
+        var body = new FormData();
+        body.append('requestId', requestId);
+
+        var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+        var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+        if (tokenMeta) {
+            headers['RequestVerificationToken'] = tokenMeta.getAttribute('content');
+        }
+
+        fetch('/Resident/MarkReplyAsRead', {
+            method: 'POST',
+            headers: headers,
+            body: body
+        }).catch(function () { /* non-fatal */ });
+    }
+
+    // Withdraws a still-pending request. The confirm dialog is the first gate;
+    // the server re-checks ownership and the Pending status before writing
+    // "Cancelled", so a stale row can never cancel a processed request.
+    function cancelResidentRequest(button) {
+        var requestNo = button.getAttribute('data-request-no') || '';
+        var documentName = button.getAttribute('data-document') || 'this request';
+        if (!requestNo) return;
+
+        if (!confirm('Are you sure you want to cancel ' + documentName + '?')) {
+            return;
+        }
+
+        var body = new FormData();
+        body.append('requestId', requestNo);
+
+        var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+        var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+        if (tokenMeta) {
+            headers['RequestVerificationToken'] = tokenMeta.getAttribute('content');
+        }
+
+        button.disabled = true;
+
+        fetch('/Resident/CancelRequest', {
+            method: 'POST',
+            headers: headers,
+            body: body
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (result) {
+                if (result && result.success) {
+                    window.location.reload();
+                    return;
+                }
+                button.disabled = false;
+                alert((result && result.message) || 'Unable to cancel this request.');
+            })
+            .catch(function () {
+                button.disabled = false;
+                alert('Something went wrong while cancelling the request. Please try again.');
+            });
+    }
+
+    // Deletes a cancelled request from the list. Only cancelled rows render
+    // this button, and the server re-checks the status, so a live request can
+    // never be removed through this endpoint.
+    function deleteResidentRequest(button) {
+        var requestNo = button.getAttribute('data-request-no') || '';
+        if (!requestNo) return;
+
+        if (!confirm('Are you sure you want to delete this cancelled request?')) {
+            return;
+        }
+
+        var body = new FormData();
+        body.append('requestId', requestNo);
+
+        var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+        var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+        if (tokenMeta) {
+            headers['RequestVerificationToken'] = tokenMeta.getAttribute('content');
+        }
+
+        button.disabled = true;
+
+        fetch('/Resident/DeleteRequest', {
+            method: 'POST',
+            headers: headers,
+            body: body
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (result) {
+                if (result && result.success) {
+                    window.location.reload();
+                    return;
+                }
+                button.disabled = false;
+                alert((result && result.message) || 'Unable to delete this request.');
+            })
+            .catch(function () {
+                button.disabled = false;
+                alert('Something went wrong while deleting the request. Please try again.');
+            });
+    }
+
+    function openEditRequestModal(button) {
+        var modalEl = document.getElementById('editRequestModal');
+        if (!modalEl) return;
+
+        var status = (button.getAttribute('data-status') || '').trim();
+        if (status.toLowerCase() !== 'pending') {
+            return;
+        }
+
+        var form = document.getElementById('editRequestForm');
+        var requestIdField = document.getElementById('editRequestId');
+        var categoryField = document.getElementById('editPurposeCategory');
+        var remarksField = document.getElementById('editSpecificRemarks');
+        var claimField = document.getElementById('editClaimFormat');
+        var label = document.getElementById('editRequestLabel');
+
+        var requestId = button.getAttribute('data-request-id') || '';
+        var category = button.getAttribute('data-purpose-category') || '';
+        var remarks = button.getAttribute('data-specific-remarks') || '';
+        var claimFormat = button.getAttribute('data-claim-format') || 'Printed Hard Copy';
+
+        if (form) form.reset();
+        if (requestIdField) requestIdField.value = requestId;
+        if (remarksField) remarksField.value = remarks;
+
+        function selectValue(select, value) {
+            if (!select) return;
+
+            var found = false;
+            for (var i = 0; i < select.options.length; i++) {
+                if (select.options[i].value === value) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found && value) {
+                var option = document.createElement('option');
+                option.value = value;
+                option.textContent = value;
+                select.appendChild(option);
+            }
+
+            select.value = value;
+        }
+
+        selectValue(categoryField, category);
+        selectValue(claimField, claimFormat || 'Printed Hard Copy');
+
+        if (label) {
+            label.textContent = requestId
+                ? 'Updating ' + requestId + '. Only pending requests can be changed.'
+                : 'Only pending requests can be changed.';
+        }
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            new bootstrap.Modal(modalEl).show();
+        } else {
+            modalEl.classList.add('show');
+            modalEl.style.display = 'block';
+            modalEl.setAttribute('aria-hidden', 'false');
+        }
+    }
+</script>
+
+<script>
+    function openPaymentModal(button) {
+        var modalEl = document.getElementById('paymentModal');
+        if (!modalEl) return;
+
+        var qrUrl = @Html.Raw(Json.Serialize(ViewBag.GCashQrUrl ?? string.Empty));
+        var accountName = @Html.Raw(Json.Serialize(ViewBag.GCashAccountName ?? string.Empty));
+        var accountNumber = @Html.Raw(Json.Serialize(ViewBag.GCashAccountNumber ?? string.Empty));
+
+        var image = document.getElementById('paymentQrImage');
+        var missing = document.getElementById('paymentQrMissing');
+        var nameLabel = document.getElementById('paymentAccountName');
+        var numberLabel = document.getElementById('paymentAccountNumber');
+        var requestLabel = document.getElementById('paymentRequestLabel');
+        var requestIdField = document.getElementById('paymentProofRequestId');
+        var proofForm = document.getElementById('paymentProofForm');
+        var requestNo = button.getAttribute('data-request-no') || '';
+
+        if (proofForm) proofForm.reset();
+        if (requestIdField) requestIdField.value = requestNo;
+
+        if (qrUrl) {
+            image.src = qrUrl;
+            image.style.display = 'block';
+            missing.style.display = 'none';
+        } else {
+            image.removeAttribute('src');
+            image.style.display = 'none';
+            missing.style.display = '';
+        }
+
+        if (nameLabel) nameLabel.textContent = accountName || 'Not provided';
+        if (numberLabel) numberLabel.textContent = accountNumber || 'Not provided';
+
+        if (requestLabel) {
+            var documentName = button.getAttribute('data-document') || 'Document request';
+            requestLabel.textContent = requestNo
+                ? documentName + ' - ' + requestNo
+                : documentName;
+        }
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            new bootstrap.Modal(modalEl).show();
+        } else {
+            modalEl.classList.add('show');
+            modalEl.style.display = 'block';
+            modalEl.setAttribute('aria-hidden', 'false');
+        }
+    }
+</script>
+
+<script>
+    (() => {
+        const table = document.getElementById('requestsTable');
+        const search = document.getElementById('requestSearch');
+        const countText = document.getElementById('requestCountText');
+        const buttons = document.querySelectorAll('[data-filter]');
+        if (!table) return;
+        let activeFilter = 'all';
+        const applyFilters = () => {
+            const query = (search?.value || '').trim().toLowerCase();
+            const rows = Array.from(table.querySelectorAll('tbody tr'));
+            let visible = 0;
+            rows.forEach(row => {
+                const matchesStatus = activeFilter === 'all' || row.dataset.status === activeFilter;
+                const matchesSearch = !query || (row.dataset.search || '').toLowerCase().includes(query);
+                const show = matchesStatus && matchesSearch;
+                row.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            if (countText) countText.textContent = `Showing ${visible ? 1 : 0}-${visible} of ${rows.length} requests`;
+        };
+        buttons.forEach(button => button.addEventListener('click', () => {
+            activeFilter = button.dataset.filter || 'all';
+            buttons.forEach(item => { item.classList.toggle('active', item === button); item.classList.toggle('btn-outline-secondary', item !== button); });
+            applyFilters();
+        }));
+        search?.addEventListener('input', applyFilters);
+
+        // The header "Search services..." bar routes here as ?search=<query>; the in-page
+        // form (and the older header submit) use ?searchQuery=. Either way, pre-fill the
+        // page search box and run the filter once on load so the results are already
+        // narrowed when the page appears.
+        const initial = new URLSearchParams(window.location.search);
+        const initialQuery = initial.get('search') || initial.get('searchQuery');
+        if (initialQuery && search) {
+            search.value = initialQuery;
+            applyFilters();
+        }
+    })();
+</script>
+
+<script>
+    // New-request profile autofill. The four identity fields (name, age, purok, address)
+    // come from the logged-in resident's saved profile, passed through view data; the
+    // document type, purpose category and remarks are intentionally left untouched so
+    // they must be chosen fresh for every request.
+    (() => {
+        const button = document.getElementById('autofillProfileBtn');
+        if (!button) return;
+
+        const fields = {
+            residentName: button.getAttribute('data-profile-name') || '',
+            residentAge: button.getAttribute('data-profile-age') || '',
+            residentPurok: button.getAttribute('data-profile-purok') || '',
+            residentAddress: button.getAttribute('data-profile-address') || ''
+        };
+
+        const apply = () => {
+            Object.keys(fields).forEach(id => {
+                const input = document.getElementById(id);
+                if (input) input.value = fields[id];
+            });
+        };
+
+        // Auto-prefill on load so the fields are already populated the first time the
+        // panel is opened.
+        apply();
+
+        // Explicit re-fill always overwrites, letting a resident restore the saved values
+        // after clearing or mistyping a field.
+        button.addEventListener('click', apply);
+    })();
+</script>
+
+<script>
+    // Dynamic certificate fee box. Each option carries the admin-configured fee
+    // from Settings > Certificates & Fees (data-fee, e.g. "50.00"); on selection
+    // the badge shows it formatted to 2 decimals as "₱ 50.00". Hidden again when
+    // no document is chosen.
+    function updateCertificateFee(select) {
+        var sel = select || document.getElementById('documentType');
+        var box = document.getElementById('certificateFeeBadge');
+        var text = document.getElementById('certificateFeeText');
+        if (!sel || !box || !text) return;
+
+        var option = sel.selectedOptions && sel.selectedOptions[0];
+        var raw = option ? (option.getAttribute('data-fee') || '') : '';
+        if (!option || !option.value || raw === '') {
+            box.style.display = 'none';
+            return;
+        }
+
+        var fee = parseFloat(raw);
+        if (isNaN(fee) || fee < 0) fee = 0;
+        text.textContent = '₱ ' + fee.toFixed(2);
+        box.style.display = 'inline-flex';
+    }
+
+    // Run once on load so a pre-selected document (e.g. after validation errors)
+    // still shows its fee without requiring a change event.
+    document.addEventListener('DOMContentLoaded', function () {
+        updateCertificateFee(document.getElementById('documentType'));
+    });
+</script>

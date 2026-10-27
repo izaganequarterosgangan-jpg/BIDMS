@@ -281,21 +281,42 @@ html {
 }
 
 /* The 60px bottom margin was a legacy spacer that made the document itself
-   scrollbar even though the content column already scrolls on its own on the
-   desktop layout (the sidebar is pinned in documents.css). It is therefore
-   dropped for the desktop layout, and kept for the stacked mobile layout where
-   the page still scrolls normally. */
+   scrollbar. It is therefore dropped for the desktop layout, and kept for the
+   stacked mobile layout where the page still scrolls normally. */
 @media (min-width: 769px) {
   body {
     margin-bottom: 0;
   }
 
-  /* The content column scrolls on its own, so the document must not scroll at all.
-     Clipping the root stops any full-bleed row inside a page from adding an outer
-     horizontal scrollbar -- that scrollbar is what stole the last 15px of viewport
-     height and re-created a few pixels of vertical page scroll. `clip` rather than
-     `hidden`, because `overflow-x: hidden` forces `overflow-y` to `auto` and would
-     turn the root into a scroll container of its own. */
+  /* ---- Pinned sidebar (desktop) ----------------------------------------
+     Lives here rather than in a page stylesheet so it applies to every screen
+     that renders _Layout / _ResidentLayout, not just Documents. The sidebar is
+     lifted out of the flex row with `position: fixed`; the main column is then
+     shifted right by the same 260px with `margin-left` so no content slides
+     underneath it. Width, navy background and internal layout are untouched. */
+  .page-shell > .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 260px;
+    /* A tall menu scrolls inside the pinned rail instead of pushing the page. */
+    overflow-y: auto;
+    z-index: 1030;
+  }
+
+  /* Takes the full space to the right of the fixed rail and never collapses
+     narrower than its content (min-width: 0 lets inner tables scroll). */
+  .page-shell > .main-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 260px;
+  }
+
+  /* Clipping the root stops any full-bleed row inside a page from adding an outer
+     horizontal scrollbar. `clip` rather than `hidden`, because `overflow-x: hidden`
+     forces `overflow-y` to `auto` and would turn the root into a scroll container
+     of its own. */
   html,
   body {
     overflow-x: clip;
@@ -308,6 +329,20 @@ html {
   }
 }
 
+/* Printing must keep the geometry the page had before the sidebar was pinned, so
+   the printable area still starts at the left edge of the sheet. */
+@media print {
+  .page-shell > .sidebar {
+    position: static;
+    height: auto;
+    overflow: visible;
+  }
+
+  .page-shell > .main-content {
+    margin-left: 0;
+  }
+}
+
 .form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
   color: var(--bs-secondary-color);
   text-align: end;
@@ -316,3 +351,569 @@ html {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
   text-align: start;
 }
+
+/* ==========================================================================
+   APPEARANCE THEMES  (Resident Settings > Appearance)
+   --------------------------------------------------------------------------
+   The inline head script in _Layout.cshtml / _ResidentLayout.cshtml reads the
+   saved preference and puts it on <html>:
+
+     data-theme="Blue Harbor" | "Green Coast" | "Sunset Market"  -> accent palette
+     data-bs-theme="dark"                                        -> dark mode
+
+   Bootstrap 5.3.3 already re-colours its own components from data-bs-theme, so
+   these rules only have to supply the app's own tokens and shell. They are
+   anchored on `html[...]` so they outrank the `:root` defaults declared in
+   _Layout.cshtml and dashboard.css no matter which loads last, and the accent
+   token is mapped onto the legacy --color-primary name so screens that already
+   consume it (profile, dashboard) follow the chosen theme for free.
+   ========================================================================== */
+
+html {
+  --bdims-accent: #2563eb;
+  --bdims-accent-strong: #0b194c;
+  --bdims-accent-soft: #eff6ff;
+  --bdims-bg: #f4f7fc;
+  --bdims-surface: #ffffff;
+  --bdims-surface-muted: #f8fafc;
+  --bdims-border: #e5eaf2;
+  --bdims-text: #0f172a;
+  --bdims-text-body: #334155;
+  --bdims-text-muted: #64748b;
+}
+
+/* --- Accent palettes ------------------------------------------------------ */
+html[data-theme="Blue Harbor"] {
+  --bdims-accent: #2563eb;
+  --bdims-accent-strong: #0b194c;
+  --bdims-accent-soft: #eff6ff;
+}
+
+html[data-theme="Green Coast"] {
+  --bdims-accent: #0f9d6f;
+  --bdims-accent-strong: #065f46;
+  --bdims-accent-soft: #ecfdf5;
+}
+
+html[data-theme="Sunset Market"] {
+  --bdims-accent: #ea8a04;
+  --bdims-accent-strong: #9a3412;
+  --bdims-accent-soft: #fff7ed;
+}
+
+html[data-theme="Blue Harbor"],
+html[data-theme="Green Coast"],
+html[data-theme="Sunset Market"] {
+  --color-primary: var(--bdims-accent);
+}
+
+/* --- Dark mode: backgrounds, surfaces and text ---------------------------- */
+html[data-bs-theme="dark"] {
+  --bdims-bg: #0b1220;
+  --bdims-surface: #1e293b;
+  --bdims-surface-muted: #172033;
+  --bdims-border: #334155;
+  --bdims-text: #f1f5f9;
+  --bdims-text-body: #cbd5e1;
+  --bdims-text-muted: #94a3b8;
+
+  /* Keep the pre-existing token names in step with the dark palette. */
+  --color-bg-main: #0b1220;
+  --color-card-bg: #1e293b;
+  --color-border: #334155;
+  --color-border-subtle: #263449;
+  --color-text-main: #f1f5f9;
+  --color-text-body: #cbd5e1;
+  --color-text-muted: #94a3b8;
+  --color-text-light: #64748b;
+  --color-accent-blue-light: #172554;
+  --color-accent-amber-light: #3a2e0b;
+  --color-accent-teal-light: #042f2e;
+  --color-accent-purple-light: #2e1065;
+  --color-status-pending-bg: #3a2e0b;
+  --color-status-pending-text: #fbbf24;
+  --color-status-processing-bg: #172554;
+  --color-status-processing-text: #93c5fd;
+  --color-status-ready-bg: #052e1b;
+  --color-status-ready-text: #34d399;
+  --color-status-released-bg: #1e293b;
+  --color-status-released-text: #94a3b8;
+  --color-avatar-bg: #e2e8f0;
+  --color-avatar-text: #0f172a;
+}
+
+/* --- Apply the tokens to the shared shell --------------------------------- */
+body {
+  background-color: var(--bdims-bg);
+  color: var(--bdims-text-body);
+}
+
+.page-shell {
+  background: var(--bdims-bg);
+  color: var(--bdims-text-body);
+}
+
+.page-shell > .main-content {
+  background: var(--bdims-bg);
+}
+
+.sidebar {
+  background: var(--bdims-accent-strong);
+}
+
+/* The resident layout pins the sidebar's navy background with a two-class
+   selector, so it needs an equally specific rule to pick up the theme. */
+html[data-theme="Green Coast"] .sidebar,
+html[data-theme="Sunset Market"] .sidebar,
+html[data-theme="Green Coast"] .resident-sidebar,
+html[data-theme="Sunset Market"] .resident-sidebar {
+  background: var(--bdims-accent-strong);
+}
+
+/* --- Accent-driven interactive elements ----------------------------------- */
+.action-button { background: var(--bdims-accent-strong); }
+.action-button:hover { background: var(--bdims-accent); }
+
+.btn-primary {
+  --bs-btn-bg: var(--bdims-accent);
+  --bs-btn-border-color: var(--bdims-accent);
+  --bs-btn-hover-bg: var(--bdims-accent-strong);
+  --bs-btn-hover-border-color: var(--bdims-accent-strong);
+  --bs-btn-active-bg: var(--bdims-accent-strong);
+  --bs-btn-active-border-color: var(--bdims-accent-strong);
+  --bs-btn-disabled-bg: var(--bdims-accent);
+  --bs-btn-disabled-border-color: var(--bdims-accent);
+}
+
+.text-primary { color: var(--bdims-accent) !important; }
+
+a { color: var(--bdims-accent); }
+a:hover { color: var(--bdims-accent-strong); }
+
+.form-check-input:checked {
+  background-color: var(--bdims-accent);
+  border-color: var(--bdims-accent);
+}
+
+.nav-button:hover,
+.nav-button.active {
+  color: var(--bdims-accent);
+  border-left-color: var(--bdims-accent);
+}
+
+.notif-view-btn { color: var(--bdims-accent-strong); }
+
+/* --- Cards ---------------------------------------------------------------- */
+.card {
+  background-color: var(--bdims-surface);
+  border-color: var(--bdims-border);
+}
+
+/* Page-scoped cards declare their own white background in a later <style>; the
+   html prefix keeps these dark overrides ahead of them. */
+html[data-bs-theme="dark"] .settings-card,
+html[data-bs-theme="dark"] .profile-card,
+html[data-bs-theme="dark"] .stat-card,
+html[data-bs-theme="dark"] .info-card,
+html[data-bs-theme="dark"] .summary-card {
+  background-color: var(--bdims-surface);
+  border-color: var(--bdims-border);
+}
+
+/* --- Resident portal in dark mode -----------------------------------------
+   The resident pages hard-code their card surfaces and some text colours in a
+   page-local <style>, so dark mode needs a slightly more specific rule to reach
+   them. The `html[...]` prefix supplies that extra specificity. */
+html[data-bs-theme="dark"] .resident-layout-shell {
+  background: var(--bdims-bg);
+}
+
+html[data-bs-theme="dark"] .resident-main {
+  color: var(--bdims-text-body);
+}
+
+html[data-bs-theme="dark"] .announcement-card,
+html[data-bs-theme="dark"] .sidebar-card,
+html[data-bs-theme="dark"] .request-card {
+  background: var(--bdims-surface);
+  border-color: var(--bdims-border);
+}
+
+html[data-bs-theme="dark"] .card-title {
+  color: var(--bdims-text);
+}
+
+html[data-bs-theme="dark"] .card-subtitle,
+html[data-bs-theme="dark"] .field-label,
+html[data-bs-theme="dark"] .contact-note {
+  color: var(--bdims-text-muted);
+}
+
+html[data-bs-theme="dark"] .quick-link {
+  color: var(--bdims-text-body);
+  border-color: var(--bdims-border);
+}
+
+html[data-bs-theme="dark"] .quick-link:hover {
+  background: var(--bdims-surface-muted);
+  color: var(--bdims-accent);
+}
+
+html[data-bs-theme="dark"] .readonly-field {
+  background: var(--bdims-surface-muted);
+  border-color: var(--bdims-border);
+  color: var(--bdims-text-body);
+}
+
+html[data-bs-theme="dark"] .resident-layout-shell .notification-button {
+  background: var(--bdims-surface);
+  border-color: var(--bdims-border);
+  color: var(--bdims-text-muted);
+}
+
+html[data-bs-theme="dark"] .resident-layout-shell .notif-dropdown {
+  background: var(--bdims-surface);
+  border-color: var(--bdims-border);
+}
+
+html[data-bs-theme="dark"] .resident-layout-shell .notif-footer {
+  border-top-color: var(--bdims-border);
+}
+
+/* ==========================================================================
+   DARK MODE FIXES  (Dashboard / Profile / Requests / Announcements)
+   --------------------------------------------------------------------------
+   These pages hard-code search bars, cards, badges and text colours in a
+   page-local <style>, and lean on Bootstrap utilities such as .bg-white /
+   .bg-light / .text-muted / .text-dark. The rules below normalise all of that
+   for dark mode. Anything that has to beat a Bootstrap `!important` utility
+   also carries `!important`, and page-scoped rules repeat the page class so
+   they outrank the page-local declarations.
+   ========================================================================== */
+
+/* --- Form controls, search fields and placeholders ------------------------ */
+html[data-bs-theme="dark"] .form-control,
+html[data-bs-theme="dark"] .form-select,
+html[data-bs-theme="dark"] input[type="text"],
+html[data-bs-theme="dark"] input[type="search"],
+html[data-bs-theme="dark"] input[type="email"],
+html[data-bs-theme="dark"] input[type="tel"],
+html[data-bs-theme="dark"] input[type="number"],
+html[data-bs-theme="dark"] textarea {
+  background-color: #0f172a;
+  border-color: var(--bdims-border);
+  color: #f8fafc;
+}
+
+html[data-bs-theme="dark"] .form-control:focus,
+html[data-bs-theme="dark"] .form-select:focus,
+html[data-bs-theme="dark"] input[type="text"]:focus,
+html[data-bs-theme="dark"] input[type="search"]:focus,
+html[data-bs-theme="dark"] textarea:focus {
+  background-color: #0f172a;
+  border-color: var(--bdims-accent);
+  color: #f8fafc;
+  box-shadow: 0 0 0 .2rem rgba(148, 163, 184, .18);
+}
+
+html[data-bs-theme="dark"] .form-control::placeholder,
+html[data-bs-theme="dark"] input::placeholder,
+html[data-bs-theme="dark"] textarea::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+
+html[data-bs-theme="dark"] .form-control:disabled,
+html[data-bs-theme="dark"] .form-control[readonly],
+html[data-bs-theme="dark"] input:disabled,
+html[data-bs-theme="dark"] input[readonly] {
+  background-color: var(--bdims-surface-muted);
+  border-color: var(--bdims-border);
+  color: #cbd5e1;
+}
+
+html[data-bs-theme="dark"] .input-group-text {
+  background-color: #0f172a;
+  border-color: var(--bdims-border);
+  color: #94a3b8;
+}
+
+/* The header search is a <form> with a white utility background. */
+html[data-bs-theme="dark"] .search-box,
+html[data-bs-theme="dark"] .header-search,
+html[data-bs-theme="dark"] .resident-search {
+  background-color: #0f172a !important;
+  border-color: var(--bdims-border) !important;
+}
+
+/* Keep the icon prefix of an input-group search flush with the field itself. */
+html[data-bs-theme="dark"] .input-group-text.bg-white {
+  background-color: #0f172a !important;
+}
+
+/* --- Bootstrap utility overrides ------------------------------------------ */
+html[data-bs-theme="dark"] .bg-white,
+html[data-bs-theme="dark"] .bg-light {
+  background-color: #1e293b !important;
+}
+
+html[data-bs-theme="dark"] .bg-body,
+html[data-bs-theme="dark"] .bg-body-tertiary {
+  background-color: var(--bdims-surface-muted) !important;
+}
+
+html[data-bs-theme="dark"] .border,
+html[data-bs-theme="dark"] .border-top,
+html[data-bs-theme="dark"] .border-bottom,
+html[data-bs-theme="dark"] .border-start,
+html[data-bs-theme="dark"] .border-end {
+  border-color: var(--bdims-border) !important;
+}
+
+html[data-bs-theme="dark"] .text-dark,
+html[data-bs-theme="dark"] .text-black {
+  color: #f8fafc !important;
+}
+
+html[data-bs-theme="dark"] .text-muted,
+html[data-bs-theme="dark"] .form-text {
+  color: #94a3b8 !important;
+}
+
+/* --- Tables --------------------------------------------------------------- */
+html[data-bs-theme="dark"] .table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--bdims-text-body);
+  --bs-table-border-color: var(--bdims-border);
+  --bs-table-hover-bg: rgba(148, 163, 184, .08);
+  --bs-table-hover-color: #f8fafc;
+  color: var(--bdims-text-body);
+}
+
+html[data-bs-theme="dark"] .table > :not(caption) > * > * {
+  border-bottom-color: var(--bdims-border);
+  background-color: transparent;
+}
+
+html[data-bs-theme="dark"] .table thead th {
+  color: #94a3b8;
+}
+
+/* --- Buttons and badges --------------------------------------------------- */
+html[data-bs-theme="dark"] .btn-light {
+  --bs-btn-bg: var(--bdims-surface-muted);
+  --bs-btn-border-color: var(--bdims-border);
+  --bs-btn-color: var(--bdims-text-body);
+  --bs-btn-hover-bg: var(--bdims-surface);
+  --bs-btn-hover-border-color: var(--bdims-border);
+  --bs-btn-hover-color: var(--bdims-text);
+}
+
+html[data-bs-theme="dark"] .badge {
+  border: 1px solid var(--bdims-border);
+}
+
+/* Coloured badges (e.g. the yellow request counter) keep their dark text. */
+html[data-bs-theme="dark"] .badge.text-dark,
+html[data-bs-theme="dark"] .badge.text-black {
+  color: #0f172a !important;
+}
+
+html[data-bs-theme="dark"] .notif-badge {
+  border-color: var(--bdims-bg);
+}
+
+/* --- Shared resident topbar bits (avatar tile, search + bell icons) -------- */
+.resident-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #1d4ed8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .75rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+html[data-bs-theme="dark"] .resident-avatar {
+  background: rgba(59, 130, 246, .2);
+  color: #93c5fd;
+}
+
+/* --- Dashboard ------------------------------------------------------------ */
+html[data-bs-theme="dark"] .resident-dashboard {
+  background: var(--bdims-bg);
+}
+
+html[data-bs-theme="dark"] .resident-dashboard .welcome-eyebrow { color: var(--bdims-accent); }
+html[data-bs-theme="dark"] .resident-dashboard .welcome-title { color: var(--bdims-text); }
+
+html[data-bs-theme="dark"] .resident-dashboard .alert-banner {
+  background: #172554;
+  border-color: #1e3a8a;
+  color: #bfdbfe;
+}
+
+html[data-bs-theme="dark"] .resident-dashboard .notice-box {
+  background: var(--bdims-surface-muted);
+  color: #94a3b8;
+}
+
+html[data-bs-theme="dark"] .resident-dashboard .date-badge { background: var(--bdims-surface-muted); }
+html[data-bs-theme="dark"] .resident-dashboard .date-badge .month { color: #94a3b8; }
+html[data-bs-theme="dark"] .resident-dashboard .date-badge .day { color: var(--bdims-text); }
+
+html[data-bs-theme="dark"] .resident-dashboard .doc-icon-tile {
+  background: rgba(99, 102, 241, .2);
+  color: #a5b4fc;
+}
+
+html[data-bs-theme="dark"] .resident-dashboard .avatar-circle-sm {
+  background: #334155;
+  color: #f8fafc;
+}
+
+html[data-bs-theme="dark"] .resident-dashboard .bg-warning-light { background: rgba(245, 158, 11, .18); }
+html[data-bs-theme="dark"] .resident-dashboard .bg-success-light { background: rgba(16, 185, 129, .18); }
+html[data-bs-theme="dark"] .resident-dashboard .bg-primary-light { background: rgba(59, 130, 246, .18); }
+
+html[data-bs-theme="dark"] .resident-dashboard .res-badge-ready,
+html[data-bs-theme="dark"] .resident-dashboard .badge-verified {
+  background: rgba(16, 185, 129, .18);
+  color: #34d399;
+}
+
+html[data-bs-theme="dark"] .resident-dashboard .res-badge-pending {
+  background: rgba(245, 158, 11, .18);
+  color: #fbbf24;
+}
+
+html[data-bs-theme="dark"] .resident-dashboard .res-badge-issued {
+  background: rgba(59, 130, 246, .18);
+  color: #93c5fd;
+}
+
+/* --- Profile -------------------------------------------------------------- */
+html[data-bs-theme="dark"] .resident-profile-page .profile-eyebrow { color: var(--bdims-accent); }
+
+html[data-bs-theme="dark"] .resident-profile-page .identity-avatar {
+  background: rgba(59, 130, 246, .2);
+  color: #93c5fd;
+}
+
+html[data-bs-theme="dark"] .resident-profile-page .status-badge.verified,
+html[data-bs-theme="dark"] .resident-profile-page .verification-box.verified {
+  background: rgba(16, 185, 129, .15);
+  border-color: rgba(16, 185, 129, .35);
+  color: #34d399;
+}
+
+html[data-bs-theme="dark"] .resident-profile-page .status-badge.unverified,
+html[data-bs-theme="dark"] .resident-profile-page .verification-box.unverified {
+  background: rgba(249, 115, 22, .15);
+  border-color: rgba(249, 115, 22, .35);
+  color: #fdba74;
+}
+
+html[data-bs-theme="dark"] .resident-profile-page .status-badge.verified,
+html[data-bs-theme="dark"] .resident-profile-page .status-badge.unverified {
+  border: 0;
+}
+
+/* --- Requests ------------------------------------------------------------- */
+html[data-bs-theme="dark"] .resident-requests-page .requests-eyebrow { color: var(--bdims-accent); }
+
+html[data-bs-theme="dark"] .resident-requests-page .metric-count,
+html[data-bs-theme="dark"] .resident-requests-page .metric-title,
+html[data-bs-theme="dark"] .resident-requests-page .request-title {
+  color: var(--bdims-text);
+}
+
+html[data-bs-theme="dark"] .resident-requests-page .metric-subtitle,
+html[data-bs-theme="dark"] .resident-requests-page .request-meta,
+html[data-bs-theme="dark"] .resident-requests-page .empty-state {
+  color: #94a3b8;
+}
+
+html[data-bs-theme="dark"] .resident-requests-page .metric-icon.pending { background: rgba(245, 158, 11, .18); color: #fbbf24; }
+html[data-bs-theme="dark"] .resident-requests-page .metric-icon.ready { background: rgba(16, 185, 129, .18); color: #34d399; }
+html[data-bs-theme="dark"] .resident-requests-page .metric-icon.issued { background: rgba(59, 130, 246, .18); color: #93c5fd; }
+
+html[data-bs-theme="dark"] .resident-requests-page .document-icon {
+  background: rgba(99, 102, 241, .2);
+  color: #a5b4fc;
+}
+
+html[data-bs-theme="dark"] .resident-requests-page .request-alert {
+  background: #172554;
+  border-color: #1e3a8a;
+  color: #bfdbfe;
+}
+
+html[data-bs-theme="dark"] .resident-requests-page .request-table th { color: #94a3b8; }
+
+html[data-bs-theme="dark"] .resident-requests-page .request-status-ready { background: rgba(16, 185, 129, .18); color: #34d399; }
+html[data-bs-theme="dark"] .resident-requests-page .request-status-pending { background: rgba(245, 158, 11, .18); color: #fbbf24; }
+html[data-bs-theme="dark"] .resident-requests-page .request-status-issued { background: rgba(59, 130, 246, .18); color: #93c5fd; }
+
+html[data-bs-theme="dark"] .resident-requests-page .details-link { color: #93c5fd; }
+
+html[data-bs-theme="dark"] .resident-requests-page .instruction-card {
+  background: var(--bdims-surface-muted);
+  border-color: var(--bdims-border);
+}
+
+html[data-bs-theme="dark"] .resident-requests-page .instruction-card h3 { color: var(--bdims-text); }
+html[data-bs-theme="dark"] .resident-requests-page .instruction-card p { color: #94a3b8; }
+
+/* --- Announcements -------------------------------------------------------- */
+html[data-bs-theme="dark"] .resident-announcements-page .announcement-eyebrow { color: var(--bdims-accent); }
+
+html[data-bs-theme="dark"] .resident-announcements-page .announcement-title { color: var(--bdims-text); }
+html[data-bs-theme="dark"] .resident-announcements-page .announcement-body { color: #cbd5e1; }
+
+html[data-bs-theme="dark"] .resident-announcements-page .announcement-details {
+  background: var(--bdims-surface-muted);
+}
+
+html[data-bs-theme="dark"] .resident-announcements-page .detail-item { color: #94a3b8; }
+html[data-bs-theme="dark"] .resident-announcements-page .detail-item i { color: var(--bdims-accent); }
+
+html[data-bs-theme="dark"] .resident-announcements-page .office-footer { color: #94a3b8; }
+
+html[data-bs-theme="dark"] .resident-announcements-page .schedule-item { border-bottom-color: var(--bdims-border); }
+html[data-bs-theme="dark"] .resident-announcements-page .schedule-title { color: var(--bdims-text); }
+html[data-bs-theme="dark"] .resident-announcements-page .schedule-date { color: var(--bdims-accent); }
+
+html[data-bs-theme="dark"] .resident-announcements-page .office-icon,
+html[data-bs-theme="dark"] .resident-announcements-page .announcement-date,
+html[data-bs-theme="dark"] .resident-announcements-page .resident-avatar {
+  background: rgba(59, 130, 246, .2);
+  color: #93c5fd;
+}
+
+html[data-bs-theme="dark"] .resident-announcements-page .category-tag.community {
+  background: rgba(99, 102, 241, .2);
+  color: #a5b4fc;
+}
+
+html[data-bs-theme="dark"] .resident-announcements-page .category-tag.health {
+  background: rgba(16, 185, 129, .18);
+  color: #34d399;
+}
+
+html[data-bs-theme="dark"] .resident-announcements-page .help-card {
+  background: #172554;
+  color: #bfdbfe;
+}
+
+/* --- Filter pills (Requests + Announcements) ------------------------------ */
+html[data-bs-theme="dark"] .filter-pill.active {
+  background: var(--bdims-accent);
+  border-color: var(--bdims-accent);
+  color: #fff;
+}
+

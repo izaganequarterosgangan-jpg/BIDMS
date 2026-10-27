@@ -1,0 +1,153 @@
+﻿@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery AntiforgeryService
+@{
+    var currentController = Context.Request.RouteValues["controller"]?.ToString() ?? string.Empty;
+    var currentAction = Context.Request.RouteValues["action"]?.ToString() ?? string.Empty;
+    var residentName = BDIMS.Services.UserClaims.GetDisplayName(User);
+    var residentRole = BDIMS.Services.UserClaims.GetRole(User);
+    var residentInitials = BDIMS.Services.UserClaims.GetInitials(User);
+    var residentPhotoUrl = BDIMS.Services.UserClaims.GetPhotoUrl(User);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - BIDMS</title>
+    <meta name="csrf-token" content="@AntiforgeryService.GetAndStoreTokens(Context).RequestToken" />
+    <!-- Appearance (Resident Settings > Appearance). Inline and pre-stylesheet so the
+         saved dark mode is on <html> for the first paint. The dark-mode preference is
+         read strictly from localStorage under the resident-only "resident_theme" key,
+         fully isolated from the admin portal's own "admin_theme" key. -->
+    <script>
+        (function () {
+            function readStored(name) {
+                try {
+                    var value = window.localStorage ? window.localStorage.getItem(name) : null;
+                    if (value) { return value; }
+                } catch (e) { /* storage blocked: fall through to the cookie */ }
+
+                var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+                return match ? decodeURIComponent(match[1]) : null;
+            }
+
+            var root = document.documentElement;
+
+            // Strictly localStorage and strictly the resident-only key, so the resident
+            // portal can never inherit the admin portal's choice.
+            var theme = null;
+            try {
+                theme = window.localStorage ? window.localStorage.getItem('resident_theme') : null;
+            } catch (e) { /* storage blocked: stay on the default theme */ }
+
+            if (theme === 'dark') {
+                root.setAttribute('data-bs-theme', 'dark');
+            } else if (theme === 'light') {
+                root.setAttribute('data-bs-theme', 'light');
+            }
+
+            var palette = readStored('bidms_theme');
+            if (palette) {
+                root.setAttribute('data-theme', palette);
+            }
+        })();
+    </script>
+    <link href="~/lib/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/BDIMS.styles.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/avatar.css" asp-append-version="true" />
+    <style>
+        .resident-layout-shell { min-height: 100vh; background: #f4f7fc; }
+        .resident-layout-shell .resident-sidebar { background: #0b194c; color: #fff; min-height: 100vh; }
+        .resident-layout-shell .resident-sidebar .nav-button { color: #cbd5e1; }
+        .resident-layout-shell .resident-sidebar .nav-button:hover,
+        .resident-layout-shell .resident-sidebar .nav-button.active { color: #fff; background: rgba(251,191,36,.16); }
+        .resident-layout-shell .resident-sidebar .nav-button.active { border-left: 3px solid #fbbf24; }
+        .resident-layout-shell .resident-main {
+            min-width: 0;
+            flex: 1 1 auto;
+            padding: 2rem;
+        }
+        .resident-layout-shell .notif-dropdown { right: 0; top: 42px; }
+        /* Bell button. dashboard.css styles this for the admin header; the resident
+           shell does not load that file, so it is defined here to keep the bell's
+           36px hit area and border identical to the profile badge beside it. */
+        .resident-layout-shell .notification-button {
+            position: relative;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            color: #64748b;
+            cursor: pointer;
+        }
+        .resident-layout-shell .notification-button:hover { background: #f8fafc; }
+        .resident-layout-shell .notif-icon { width: 24px; text-align: center; flex: 0 0 24px; }
+        .resident-layout-shell .notif-footer { padding: .65rem .85rem; text-align: center; border-top: 1px solid #e2e8f0; }
+        .resident-layout-shell .notif-footer a { color: #2563eb; font-size: .8rem; font-weight: 700; text-decoration: none; }
+        @@media (max-width: 768px) {
+            .resident-layout-shell .page-shell { display: block; }
+            .resident-layout-shell .resident-sidebar { min-height: auto; width: 100%; }
+            .resident-layout-shell .resident-sidebar .nav-list { display: flex; flex-wrap: wrap; gap: .35rem; }
+            .resident-layout-shell .resident-sidebar .nav-button { flex: 1 1 180px; }
+            .resident-layout-shell .resident-main { padding: 1.25rem; }
+        }
+    </style>
+    @RenderSection("Styles", required: false)
+</head>
+<body>
+    <div class="page-shell resident-layout-shell">
+        <aside class="sidebar resident-sidebar">
+            <div>
+                <div class="sidebar-logo-container">
+                    <div class="logo-badge"><i class="bi bi-shield-check text-warning fs-4"></i></div>
+                    <div><h1 class="brand-title">BIDMS</h1><p class="brand-subtitle">Resident Portal</p></div>
+                </div>
+                <div class="nav-menu">
+                    <p class="menu-section-title">Resident Menu</p>
+                    <nav class="nav-list" aria-label="Resident navigation">
+                        <a asp-controller="Resident" asp-action="Dashboard" class="nav-button @(currentController == "Resident" && currentAction == "Dashboard" ? "active" : "")"><div class="nav-button-left"><i class="bi bi-grid-fill"></i><span>Dashboard</span></div></a>
+                        <a asp-controller="Resident" asp-action="Profile" class="nav-button @(currentController == "Resident" && currentAction == "Profile" ? "active" : "")"><div class="nav-button-left"><i class="bi bi-person-fill"></i><span>My Profile</span></div></a>
+                        <a asp-controller="Resident" asp-action="Requests" class="nav-button @(currentController == "Resident" && currentAction == "Requests" ? "active" : "")"><div class="nav-button-left"><i class="bi bi-file-earmark-text-fill"></i><span>My Requests</span>@await Component.InvokeAsync("ResidentRequestsBadge")</div></a>
+                        <a asp-controller="Resident" asp-action="Announcements" class="nav-button @(currentController == "Resident" && currentAction == "Announcements" ? "active" : "")"><div class="nav-button-left"><i class="bi bi-megaphone-fill"></i><span>Announcements</span></div></a>
+                        <a asp-controller="Resident" asp-action="Settings" class="nav-button @(currentController == "Resident" && currentAction == "Settings" ? "active" : "")"><div class="nav-button-left"><i class="bi bi-gear"></i><span>Settings</span></div></a>
+                    </nav>
+                </div>
+            </div>
+            <div>
+                <div class="sidebar-user">
+                    <div class="user-profile">
+                        <div class="avatar-gold" data-user-avatar>
+                            @if (!string.IsNullOrWhiteSpace(residentPhotoUrl))
+                            {
+                                <img class="avatar-photo-image" src="@residentPhotoUrl" alt="@residentName" />
+                            }
+                            else
+                            {
+                                @residentInitials
+                            }
+                        </div>
+                        <div><p class="user-name">@residentName</p><p class="user-role">@residentRole</p></div>
+                    </div>
+                    <form asp-controller="Account" asp-action="Logout" method="post" class="m-0">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="logout-button" title="Log Out"><i class="bi bi-box-arrow-right fs-5"></i><span class="visually-hidden">Logout</span></button>
+                    </form>
+                </div>
+            </div>
+        </aside>
+        <main class="main-content resident-main">
+            @RenderBody()
+        </main>
+    </div>
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await Html.PartialAsync("_PortalSearch")
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

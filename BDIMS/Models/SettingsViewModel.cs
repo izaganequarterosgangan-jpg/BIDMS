@@ -33,6 +33,22 @@ namespace BDIMS.Models
         // Current tab
         public string ActiveTab { get; set; } = "general";
 
+        // Online payment settings shown on the Online Payment Methods card.
+        // Persisted in the AppSettings key/value table (Payment.* keys) and read
+        // back on the Settings GET so reopening the page shows what is stored.
+        public string PaymentMethodName { get; set; } = "GCash";
+
+        public string GcashAccountName { get; set; } = string.Empty;
+
+        public string GcashAccountNumber { get; set; } = string.Empty;
+
+        /// <summary>
+        /// True when a GCash QR image is present at wwwroot/uploads/gcash_qr.png.
+        /// Controls whether the card previews the QR and whether the modal can
+        /// offer a "replace" hint instead of a first-time upload hint.
+        /// </summary>
+        public bool HasGcashQr { get; set; }
+
         // Printable certificate layouts maintained in the Template Editor
         public List<CertificateTemplate> CertificateTemplates { get; set; } =
             new List<CertificateTemplate>();

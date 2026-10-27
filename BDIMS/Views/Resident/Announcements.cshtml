@@ -1,0 +1,160 @@
+@model BDIMS.Models.ResidentDashboardViewModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Announcements";
+    Layout = "_ResidentLayout";
+
+    var announcements = Model?.Announcements ?? new List<BDIMS.Models.ResidentAnnouncementItem>();
+    var emergencyHotlines = Model?.EmergencyHotlines ?? new List<BDIMS.Models.EmergencyHotline>();
+    var fullName = string.IsNullOrWhiteSpace(Model?.ResidentName) ? "Resident" : Model.ResidentName;
+    var initials = BDIMS.Services.UserClaims.GetInitials(User);
+    var headerDate = DateTime.Now.ToString("dddd, MMMM d, yyyy", CultureInfo.InvariantCulture);
+
+    string CategoryClass(string? category) => (category ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "health" => "health",
+        "youth" => "youth",
+        "urgent" => "urgent",
+        _ => "general"
+    };
+
+    string CategoryLabel(string? category) => string.IsNullOrWhiteSpace(category) ? "General" : category;
+
+    (string Month, string Day) DateBadge(string? date)
+    {
+        if (DateTime.TryParse(date, out var parsed)) return (parsed.ToString("MMM", CultureInfo.InvariantCulture).ToUpperInvariant(), parsed.Day.ToString("00"));
+        var parts = (date ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length > 1 ? (parts[0].ToUpperInvariant(), parts[1]) : ("—", string.Empty);
+    }
+    string FullDate(string? date) => DateTime.TryParse(date, out var parsed) ? parsed.ToString("MMMM d, yyyy", CultureInfo.InvariantCulture) : (date ?? "Date to be announced");
+}
+
+<style>
+    .resident-announcements-page { width: 100%; max-width: 1440px; margin: 0 auto; }
+    .resident-announcements-page .announcement-eyebrow { color: #2563eb; font-size: .7rem; font-weight: 800; letter-spacing: .1em; }
+    .resident-announcements-page .announcement-card, .resident-announcements-page .sidebar-card { background: #fff; border: 1px solid #e9ecef; border-radius: 12px; box-shadow: 0 2px 8px rgba(15,23,42,.04); }
+    .resident-announcements-page .announcement-item { scroll-margin-top: 96px; }
+    .resident-announcements-page .filter-pill { border-radius: 999px; font-size: .75rem; font-weight: 700; white-space: nowrap; }
+    .resident-announcements-page .filter-pill.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .resident-announcements-page .announcement-date { width: 52px; height: 52px; border-radius: 10px; background: #dbeafe; color: #1d4ed8; text-align: center; padding-top: .35rem; flex: 0 0 auto; }
+    .resident-announcements-page .announcement-date .month { display: block; font-size: .62rem; font-weight: 800; letter-spacing: .06em; }
+    .resident-announcements-page .announcement-date .day { display: block; font-size: 1.1rem; font-weight: 800; line-height: 1.05; }
+    .resident-announcements-page .category-tag { border-radius: 999px; padding: .25rem .55rem; font-size: .68rem; font-weight: 800; }
+    .resident-announcements-page .category-tag.general { background: #e0e7ff; color: #4338ca; }
+    .resident-announcements-page .category-tag.health { background: #d1fae5; color: #047857; }
+    .resident-announcements-page .category-tag.youth { background: #fff3cd; color: #856404; }
+    .resident-announcements-page .category-tag.urgent { background: #f8d7da; color: #721c24; }
+    .resident-announcements-page .announcement-title { color: #0f172a; font-weight: 800; }
+    .resident-announcements-page .announcement-body { color: #475569; font-size: .85rem; line-height: 1.55; }
+    .resident-announcements-page .announcement-details { border-radius: 10px; padding: .85rem; }
+    .resident-announcements-page .detail-item { color: #475569; font-size: .76rem; }
+    .resident-announcements-page .detail-item i { color: #2563eb; margin-right: .35rem; }
+    .resident-announcements-page .office-footer { color: #64748b; font-size: .75rem; }
+    .resident-announcements-page .schedule-item { border-bottom: 1px solid #eef2f7; padding: .8rem 0; }
+    .resident-announcements-page .schedule-item:last-child { border-bottom: 0; padding-bottom: 0; }
+    .resident-announcements-page .schedule-date { color: #2563eb; font-size: .68rem; font-weight: 800; letter-spacing: .06em; }
+    .resident-announcements-page .schedule-title { color: #0f172a; font-weight: 800; font-size: .85rem; }
+    .resident-announcements-page .office-icon { width: 34px; height: 34px; border-radius: 9px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; }
+    .resident-announcements-page .help-card { background: #eef4ff; border: 0; color: #1e3a8a; }
+    .resident-announcements-page .resident-avatar { width: 36px; height: 36px; border-radius: 50%; background: #dbeafe; color: #1d4ed8; display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 800; text-decoration: none; }
+    .resident-announcements-page .emergency-hotline { display: flex; align-items: center; gap: .5rem; padding: .5rem 0; border-bottom: 1px solid #eef2f7; }
+    .resident-announcements-page .emergency-hotline:last-child { border-bottom: 0; padding-bottom: 0; }
+    .resident-announcements-page .emergency-hotline i { color: #dc2626; font-size: 1.1rem; }
+    .resident-announcements-page .emergency-hotline .hotline-info { flex: 1; }
+    .resident-announcements-page .emergency-hotline .hotline-label { font-weight: 700; font-size: .8rem; color: #0f172a; }
+    .resident-announcements-page .emergency-hotline .hotline-number { font-size: .75rem; color: #64748b; }
+    @@media (max-width: 767.98px) { .resident-announcements-page .header-search { width: 100% !important; } .resident-announcements-page .filter-pills { overflow-x: auto; flex-wrap: nowrap !important; padding-bottom: .25rem; } }
+</style>
+
+<div class="resident-announcements-page">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <div><h1 class="h3 fw-bold mb-1">Announcements</h1><p class="text-muted small mb-0">@headerDate · Bohol</p></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="header-search d-flex align-items-center gap-2 bg-white border rounded-3 px-2 py-1"><i class="bi bi-search text-muted"></i><input id="announcementSearch" class="form-control form-control-sm border-0 shadow-none" placeholder="Search announcements..." style="width:200px;" /></div>
+            @await Html.PartialAsync("_NotificationBell")
+            <a asp-controller="Resident" asp-action="Profile" class="resident-avatar" title="@fullName">@initials</a>
+        </div>
+    </div>
+
+    <div class="mb-4"><div class="announcement-eyebrow text-uppercase mb-1">NEWS FROM YOUR BARANGAY</div><h2 class="h2 fw-bold mb-2">Barangay announcements</h2><p class="text-muted mb-0">Stay informed about community activities and services in Governor Boyles.</p></div>
+
+    <div class="d-flex gap-2 filter-pills mb-3 flex-wrap" role="group" aria-label="Announcement categories">
+        <button class="btn btn-sm filter-pill active" data-category="all">All</button>
+        <button class="btn btn-sm filter-pill btn-outline-secondary" data-category="general">General</button>
+        <button class="btn btn-sm filter-pill btn-outline-secondary" data-category="health">Health</button>
+        <button class="btn btn-sm filter-pill btn-outline-secondary" data-category="youth">Youth</button>
+        <button class="btn btn-sm filter-pill btn-outline-secondary" data-category="urgent">Urgent</button>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mb-3"><span class="text-muted small"><strong id="announcementCount">@announcements.Count</strong> announcements</span></div>
+
+    <div class="row g-4 align-items-start">
+        <div class="col-lg-8">
+            @if (!announcements.Any())
+            {
+                <div class="announcement-card p-4 text-center text-muted">No announcements yet.</div>
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-4">
+                @foreach (var announcement in announcements)
+                {
+                    var badge = DateBadge(announcement.FullDate ?? announcement.DateString);
+                    var category = CategoryLabel(announcement.Category);
+                    var categoryClass = CategoryClass(announcement.Category);
+                    <article id="@announcement.Id" class="announcement-card p-4 announcement-item" data-category="@categoryClass" data-search="@announcement.Title @announcement.Description @category">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="announcement-date"><span class="month">@badge.Month</span><span class="day">@badge.Day</span></div>
+                            <div class="flex-grow-1 min-w-0">
+                                <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap"><div><span class="category-tag @categoryClass">@category</span><h3 class="announcement-title h5 mt-2 mb-1">@announcement.Title</h3></div><small class="text-muted">Posted @announcement.FullDate @(string.IsNullOrWhiteSpace(announcement.ScheduleTime) ? "" : " · " + announcement.ScheduleTime)</small></div>
+                                <p class="announcement-body mb-3">@announcement.Description</p>
+                                <div class="announcement-details row g-2 mb-3 bg-body-tertiary"><div class="col-sm-6"><div class="detail-item"><i class="bi bi-calendar-event"></i>@FullDate(announcement.FullDate)</div>@(string.IsNullOrWhiteSpace(announcement.ScheduleTime) ? "" : "<div class=\"detail-item mt-2\"><i class=\"bi bi-clock\"></i>" + announcement.ScheduleTime + "</div>")</div><div class="col-sm-6"><div class="detail-item"><i class="bi bi-geo-alt"></i>Barangay hall</div><div class="detail-item mt-2"><i class="bi bi-info-circle"></i>Open to all residents</div></div></div>
+                                <div class="office-footer">Barangay Governor Boyles · Ubay, Bohol</div>
+                            </div>
+                        </div>
+                    </article>
+                }
+                </div>
+            }
+            <div class="text-center text-muted small py-3 mt-3">You're up to date. Check back for more barangay announcements.</div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="d-flex flex-column gap-4">
+                <div class="sidebar-card p-4"><h3 class="h5 fw-bold mb-3">Your barangay office</h3><div class="d-flex gap-3 align-items-start"><div class="office-icon"><i class="bi bi-building"></i></div><div><strong>Barangay Governor Boyles</strong><div class="small text-muted">Ubay, Bohol</div><div class="small text-muted">Mon–Fri · 8:00 AM–5:00 PM</div></div></div></div>
+
+                <div class="sidebar-card p-4"><h3 class="h5 fw-bold mb-3">Emergency Hotlines</h3>
+                    @if (emergencyHotlines.Any())
+                    {
+                        @foreach (var hotline in emergencyHotlines)
+                        {
+                            <div class="emergency-hotline"><i class="bi bi-telephone-fill"></i><div class="hotline-info"><div class="hotline-label">@hotline.Title</div><div class="hotline-number">@hotline.PhoneNumber</div></div></div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-muted small">No emergency hotlines configured.</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (() => {
+        const items = [...document.querySelectorAll('.announcement-item')];
+        const search = document.getElementById('announcementSearch');
+        const count = document.getElementById('announcementCount');
+        let category = 'all';
+        const apply = () => { const query = (search?.value || '').toLowerCase(); let visible = 0; items.forEach(item => { const show = (category === 'all' || item.dataset.category === category) && (!query || (item.dataset.search || '').toLowerCase().includes(query)); item.classList.toggle('d-none', !show); if (show) visible++; }); if (count) count.textContent = visible; };
+        document.querySelectorAll('[data-category]').forEach(button => button.addEventListener('click', () => { category = button.dataset.category || 'all'; document.querySelectorAll('.filter-pill').forEach(pill => { const active = pill === button; pill.classList.toggle('active', active); pill.classList.toggle('btn-outline-secondary', !active); }); apply(); }));
+        search?.addEventListener('input', apply);
+
+        const initial = new URLSearchParams(window.location.search);
+        const initialQuery = initial.get('search') || initial.get('searchQuery');
+        if (initialQuery && search) {
+            search.value = initialQuery;
+            apply();
+        }
+    })();
+</script>

@@ -20,6 +20,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - BIDMS</title>
     <meta name="csrf-token" content="@AntiforgeryService.GetAndStoreTokens(Context).RequestToken" />
+    <!-- Appearance. Runs inline, before any stylesheet is applied, so the chosen dark
+         mode is on <html> for the first paint and the admin portal never flashes the
+         default colours. The dark-mode preference is read strictly from localStorage
+         under the admin-only "admin_theme" key, fully isolated from the resident
+         portal's own "resident_theme" key. -->
+    <script>
+        (function () {
+            function readStored(name) {
+                try {
+                    var value = window.localStorage ? window.localStorage.getItem(name) : null;
+                    if (value) { return value; }
+                } catch (e) { /* storage blocked: fall through to the cookie */ }
+
+                var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+                return match ? decodeURIComponent(match[1]) : null;
+            }
+
+            var root = document.documentElement;
+
+            // Strictly localStorage and strictly the admin-only key, so the admin portal
+            // can never inherit the resident portal's choice.
+            var theme = null;
+            try {
+                theme = window.localStorage ? window.localStorage.getItem('admin_theme') : null;
+            } catch (e) { /* storage blocked: stay on the default theme */ }
+
+            if (theme === 'dark') {
+                root.setAttribute('data-bs-theme', 'dark');
+            } else if (theme === 'light') {
+                root.setAttribute('data-bs-theme', 'light');
+            }
+
+            var palette = readStored('bidms_theme');
+            if (palette) {
+                root.setAttribute('data-theme', palette);
+            }
+        })();
+    </script>
     <!-- Bootstrap 5 CSS (served from the vendored copy so the app works offline) -->
     <link href="~/lib/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet" />
     <!-- Bootstrap Icons -->
@@ -573,38 +611,69 @@
                         var currentAction = Context.Request.RouteValues["action"]?.ToString() ?? "";
                     }
                     <nav class="nav-list">
-                        <a asp-controller="Home" asp-action="Dashboard" class="nav-button @(currentController == "Home" && currentAction == "Dashboard" ? "active" : "")">
-                            <div class="nav-button-left"><i class="bi bi-grid-fill"></i><span>Dashboard</span></div>
-                        </a>
-                        <a asp-controller="Home" asp-action="Residents" class="nav-button @(currentController == "Home" && currentAction == "Residents" ? "active" : "")">
-                            <div class="nav-button-left"><i class="bi bi-people-fill"></i><span>Residents</span></div>
-                        </a>
-                        <a asp-controller="Home" asp-action="Documents" class="nav-button @(currentController == "Home" && currentAction == "Documents" ? "active" : "")">
-                            <div class="nav-button-left"><i class="bi bi-file-earmark-text-fill"></i><span>Documents</span></div>
-                        </a>
-                        <a asp-controller="Home" asp-action="Certificates" class="nav-button @(currentController == "Home" && currentAction == "Certificates" ? "active" : "")">
-                            <div class="nav-button-left"><i class="bi bi-award-fill"></i><span>Certificates</span></div>
-                        </a>
-                        <a asp-controller="Home" asp-action="Blotter" class="nav-button @(currentController == "Home" && currentAction == "Blotter" ? "active" : "")">
-                            <div class="nav-button-left"><i class="bi bi-shield-lock-fill"></i><span>Blotter</span></div>
-                        </a>
-                        <a asp-controller="Home" asp-action="Announcements" class="nav-button @(currentController == "Home" && currentAction == "Announcements" ? "active" : "")">
-                            <div class="nav-button-left"><i class="bi bi-megaphone-fill"></i><span>Announcements</span></div>
-                        </a>
-                        <a asp-controller="Home" asp-action="Reports" class="nav-button @(currentController == "Home" && currentAction == "Reports" ? "active" : "")">
-                            <div class="nav-button-left"><i class="bi bi-bar-chart-fill"></i><span>Reports</span></div>
-                        </a>
-                        <a asp-controller="Home" asp-action="Settings" class="nav-button @(currentController == "Home" && currentAction == "Settings" ? "active" : "")">
-                            <div class="nav-button-left"><i class="bi bi-gear-fill"></i><span>Settings</span></div>
-                        </a>
+                        @if (User.IsInRole("Administrator"))
+                        {
+                            <a asp-controller="Home" asp-action="Dashboard" class="nav-button @(currentController == "Home" && currentAction == "Dashboard" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-grid-fill"></i><span>Dashboard</span></div>
+                            </a>
+                            <a asp-controller="Home" asp-action="Residents" class="nav-button @(currentController == "Home" && currentAction == "Residents" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-people-fill"></i><span>Residents</span></div>
+                            </a>
+                            <a asp-controller="UserManagement" asp-action="Index" class="nav-button @(currentController == "UserManagement" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-person-gear"></i><span>User Management</span></div>
+                            </a>
+                            <a asp-controller="Home" asp-action="Documents" class="nav-button @(currentController == "Home" && currentAction == "Documents" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-file-earmark-text-fill"></i><span>Documents</span><span id="documentsSidebarBadge">@await Component.InvokeAsync("SidebarBadge")</span></div>
+                            </a>
+                            <a asp-controller="Home" asp-action="Certificates" class="nav-button position-relative @(currentController == "Home" && currentAction == "Certificates" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-award-fill"></i><span>Certificates</span>@await Component.InvokeAsync("SidebarBadge")</div>
+                            </a>
+                            <a asp-controller="Home" asp-action="Blotter" class="nav-button @(currentController == "Home" && currentAction == "Blotter" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-shield-lock-fill"></i><span>Blotter</span></div>
+                            </a>
+                            <a asp-controller="Home" asp-action="Announcements" class="nav-button @(currentController == "Home" && currentAction == "Announcements" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-megaphone-fill"></i><span>Announcements</span></div>
+                            </a>
+                            <a asp-controller="Home" asp-action="Reports" class="nav-button @(currentController == "Home" && currentAction == "Reports" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-bar-chart-fill"></i><span>Reports</span></div>
+                            </a>
+                            <a asp-controller="Home" asp-action="Settings" class="nav-button @(currentController == "Home" && currentAction == "Settings" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-gear-fill"></i><span>Settings</span></div>
+                            </a>
+                        }
+                        else
+                        {
+                            @* Resident portal navigation: every item routes to a real Resident action (no dead links). *@
+                            <a asp-controller="Resident" asp-action="Dashboard" class="nav-button @(currentController == "Resident" && currentAction == "Dashboard" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-grid-fill"></i><span>Dashboard</span></div>
+                            </a>
+                            <a asp-controller="Resident" asp-action="Profile" class="nav-button @(currentController == "Resident" && currentAction == "Profile" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-person-fill"></i><span>My Profile</span></div>
+                            </a>
+                            <a asp-controller="Resident" asp-action="Requests" class="nav-button position-relative @(currentController == "Resident" && currentAction == "Requests" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-file-earmark-text-fill"></i><span>My Requests</span>@await Component.InvokeAsync("ResidentRequestsBadge")</div>
+                            </a>
+                            <a asp-controller="Resident" asp-action="RequestDocument" class="nav-button @(currentController == "Resident" && currentAction == "RequestDocument" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-file-earmark-plus-fill"></i><span>Request a Document</span></div>
+                            </a>
+                            <a asp-controller="Resident" asp-action="Announcements" class="nav-button @(currentController == "Resident" && currentAction == "Announcements" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-megaphone-fill"></i><span>Announcements</span></div>
+                            </a>
+                            <a asp-controller="Resident" asp-action="Settings" class="nav-button @(currentController == "Resident" && currentAction == "Settings" ? "active" : "")">
+                                <div class="nav-button-left"><i class="bi bi-gear"></i><span>Settings</span></div>
+                            </a>
+                        }
                     </nav>
                 </div>
             </div>
 
                 <div class="sidebar-user">
                 @* Anchoring the block keeps .user-profile's own flex layout, gap and the
-                   sidebar's fixed width intact - the anchor only supplies the hit area. *@
-                <a asp-controller="Account" asp-action="Profile" class="profile-badge-link sidebar-profile-link" title="My Profile">
+                   sidebar's fixed width intact - the anchor only supplies the hit area.
+                   Residents land on Resident/Profile (dynamic resident card); admins keep Account/Profile. *@
+                @if (User.IsInRole("Administrator"))
+                {
+                    <a asp-controller="Account" asp-action="Profile" class="profile-badge-link sidebar-profile-link" title="My Profile">
                     <div class="user-profile">
                         <div class="avatar-gold" data-user-avatar>
                         @if (!string.IsNullOrEmpty(currentUserPhotoUrl))
@@ -630,6 +699,25 @@
                         <i class="bi bi-box-arrow-right fs-5"></i>
                     </button>
                 </form>
+                }
+                else
+                {
+                    <a asp-controller="Resident" asp-action="Profile" class="profile-badge-link sidebar-profile-link" title="My Profile">
+                        <div class="user-profile">
+                            <div class="avatar-gold">@currentUserInitials</div>
+                            <div>
+                                <p class="user-name">@currentUserName</p>
+                                <p class="user-role">@currentUserRole</p>
+                            </div>
+                        </div>
+                    </a>
+                    <form asp-controller="Account" asp-action="Logout" method="post" class="m-0">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="logout-button" title="Log Out">
+                            <i class="bi bi-box-arrow-right fs-5"></i>
+                        </button>
+                    </form>
+                }
             </div>
         </aside>
 
@@ -732,6 +820,97 @@
             }
         })();
     </script>
+    @if (User.IsInRole("Administrator"))
+    {
+        <script>
+            // Live admin badges: the bell total and the Documents sidebar counter are
+            // refreshed from the same endpoint so both stay correct without a reload.
+            function updateDocumentsSidebarBadge(count) {
+                var badge = document.querySelector('#documentsSidebarBadge .sidebar-badge');
+                if (!badge) return;
+
+                var remaining = (typeof count === 'number' && count > 0) ? count : 0;
+                if (remaining <= 0) {
+                    badge.style.display = 'none';
+                    badge.textContent = '0';
+                    badge.setAttribute('title', '0 document requests awaiting review');
+                } else {
+                    badge.style.display = '';
+                    badge.textContent = (remaining > 99) ? '99+' : String(remaining);
+                    badge.setAttribute('title', remaining + ' document request' +
+                        (remaining === 1 ? '' : 's') + ' awaiting review');
+                }
+            }
+
+            function renderLiveNotificationDropdown(notifications) {
+                var dropdown = document.getElementById('notifDropdown');
+                if (!dropdown) return;
+
+                // Reuse the shared renderer (site.js) so the live rows keep the same
+                // icons, unread styling and click behaviour as the rest of the shell.
+                if (typeof renderNotifDropdown === 'function') {
+                    renderNotifDropdown(notifications || []);
+                    return;
+                }
+
+                if (!notifications || notifications.length === 0) {
+                    dropdown.innerHTML = '<div class="notif-empty">No notifications at this time.</div>';
+                    return;
+                }
+
+                var html = '<div class="header"><strong>Notifications</strong></div><div class="items">';
+                notifications.forEach(function (n) {
+                    html += '<div class="notif-item ' + (n.isRead ? 'read' : 'unread') + '"' +
+                        ' data-id="' + escapeHtml(n.id) + '"' +
+                        ' data-type="' + escapeHtml(n.type || '') + '"' +
+                        ' data-related-url="' + escapeHtml(n.relatedUrl || '') + '">' +
+                        '<div class="notif-item-content">' +
+                        '<div class="title">' + escapeHtml(n.title) + '</div>' +
+                        '<div class="meta">' + escapeHtml(n.message || '') + '</div>' +
+                        '<div class="meta">' + escapeHtml(n.createdAt || '') + '</div>' +
+                        '</div></div>';
+                });
+                html += '</div>';
+                dropdown.innerHTML = html;
+            }
+
+            function fetchLiveNotifications() {
+                fetch('/Home/GetNotifications', {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                    .then(function (response) {
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        if (!data || data.success !== true) return;
+
+                        if (typeof updateNotifBadge === 'function') {
+                            updateNotifBadge(data.totalBellCount || 0);
+                        }
+                        updateDocumentsSidebarBadge(data.pendingDocRequests || 0);
+                        renderLiveNotificationDropdown(data.notifications || []);
+                    })
+                    .catch(function (error) {
+                        // Leave the last good badge/dropdown in place on a transient
+                        // network error; the next poll retries automatically.
+                        console.error('Live notification poll failed', error);
+                    });
+            }
+
+            // The admin bell is shared by Dashboard/Settings; point its click handler at
+            // the Home endpoint that now returns the badge totals as well.
+            document.querySelectorAll('#notifDropdown').forEach(function (dropdown) {
+                dropdown.setAttribute('data-endpoint-prefix', '/Home');
+            });
+
+            document.addEventListener('DOMContentLoaded', function () {
+                fetchLiveNotifications();
+                setInterval(fetchLiveNotifications, 5000);
+            });
+        </script>
+    }
+    @await Html.PartialAsync("_PortalSearch")
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

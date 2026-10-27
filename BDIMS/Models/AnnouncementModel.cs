@@ -7,6 +7,16 @@ namespace BDIMS.Models
         public string Purpose { get; set; } = string.Empty;
         public string TargetAudience { get; set; } = string.Empty;
         public string Date { get; set; } = string.Empty;
+        public string ScheduleTime { get; set; } = string.Empty;
         public string Priority { get; set; } = string.Empty;
+        public string Category { get; set; } = "General";
+    }
+
+    public class EmergencyHotline
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string PhoneNumber { get; set; } = string.Empty;
+        public int DisplayOrder { get; set; }
     }
 }

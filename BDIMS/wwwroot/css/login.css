@@ -182,6 +182,13 @@
     right: 12px;
     cursor: pointer;
     display: flex;
+    align-items: center;
+    color: #94a3b8;
+    font-size: 1rem;
+}
+
+.eye-icon:hover {
+    color: #475569;
 }
 
 .form-input {
@@ -296,4 +303,646 @@
     height: 6px;
     border-radius: 50%;
     background-color: #22c55e;
+}
+
+/* Register hint below the sign-in form (matches the login card text scale) */
+.register-hint {
+    margin: 0 0 1.5rem 0;
+    font-size: 0.85rem;
+    color: #64748b;
+    text-align: center;
+}
+
+.register-hint .register-link {
+    color: #d97706;
+    text-decoration: underline;
+    font-weight: 600;
+}
+
+.register-hint .register-link:hover {
+    color: #b45309;
+    text-decoration: none;
+}
+
+/* ============================================================
+   REGISTER PAGE FIXES - scoped to .register-page / .register-form
+   so the Login and Registration Pending pages are untouched.
+   ============================================================ */
+
+/* Sticky branding panel: pins to the viewport while the registration
+   form scrolls beside it. Desktop only - below 769px the layout stacks
+   vertically and a full-height sticky panel would cover the form. */
+@media (min-width: 769px) {
+    .register-page .left-banner {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow: hidden;
+    }
+}
+
+/* Wider card so the 2-4 column grid has room to breathe (the Login
+   page keeps its 400px card). */
+.register-page .form-container {
+    max-width: 760px;
+}
+
+/* Keep the decorative banner chips identical to the Login page:
+   Bootstrap (loaded on this page for the grid) bumps font-weight. */
+.register-page .badge {
+    font-weight: 400;
+}
+
+/* Field container. Replaces .input-group inside the register form
+   because Bootstrap (loaded here) turns .input-group into a horizontal
+   flex row, which would break the stacked label/field/validation layout. */
+.register-form .field-group {
+    margin-bottom: 0.75rem;
+}
+
+/* Vertical rhythm comes from the field margins above, not from
+   column padding. */
+.register-form .row {
+    --bs-gutter-y: 0;
+}
+
+/* Centre the background glyphs vertically so they line up in both
+   single-line inputs and select dropdowns. */
+.register-form .input-icon,
+.register-form .eye-icon {
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+}
+
+/* Selects get the same left padding as .form-input so the background
+   icon never overlaps the selected text, plus matching theme styling
+   (the select chevron on the right is preserved by Bootstrap). */
+.register-form select.form-select {
+    padding: 0.75rem 2.25rem 0.75rem 2.5rem;
+    font-size: 0.875rem;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    color: #0f172a;
+    box-sizing: border-box;
+}
+
+/* File input matches the themed .form-input look. */
+.register-form input[type="file"].form-control {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.875rem;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    color: #0f172a;
+}
+
+/* ------------------------------------------------------------
+   Register form labels: block-level, uppercase, tight spacing so
+   labels never wrap into or overlap the input below them.
+   ------------------------------------------------------------ */
+.register-form .input-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 0.35rem;
+}
+
+/* ============================================================
+   REGISTER MODAL (rendered inside /Account/Login)
+   ============================================================ */
+
+/* Centered popup card: fixed over the whole page, blurred dark backdrop. */
+.register-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1055;
+    display: none;
+    background-color: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.register-modal.show {
+    display: flex;
+}
+
+/* Dynamically created backdrop (z-index below the dialog). */
+.register-modal .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    background-color: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+/* Bootstrap .modal-dialog-centered + .modal-lg on the dialog.
+   Tall-form fix (mirrors the Blotter.css modal-scroll pattern): the dialog
+   is capped near the viewport height, the content is capped at 90vh as a
+   flex column, the form stretches inside it, the body is the only scroll
+   region, and the footer stays pinned - so the 15-field grid is never cut
+   off on short screens. */
+.register-modal .modal-dialog-centered.modal-lg {
+    max-width: 900px;
+    max-height: calc(100vh - 2.5rem);
+    /* True center viewport alignment */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 3.5rem);
+    margin: auto;
+}
+
+/* Modal content: flex column capped at 90vh so header and footer stay on
+   screen and only the field grid scrolls. */
+.register-modal .modal-content {
+    border: 0;
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    padding: 0;
+    /* Rich solid dark background so underlying page does not bleed through */
+    background-color: #0f172a !important;
+    color: #f1f5f9;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+    overflow: hidden;
+}
+
+.register-modal .modal-header {
+    background-color: rgba(15, 23, 42, 0.4);
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0;
+    padding: 0.8rem 1.25rem 0.65rem;
+    flex-shrink: 0;
+}
+
+.register-modal .modal-title {
+    color: #f1f5f9;
+    font-weight: 700;
+    margin: 0;
+}
+
+.register-modal .btn-close {
+    background: rgba(255, 255, 255, 0.12);
+    border: 0;
+    color: #f1f5f9;
+    width: 1.4rem;
+    height: 1.4rem;
+    opacity: 0.85;
+}
+
+.register-modal .btn-close:hover {
+    background: rgba(255, 255, 255, 0.35);
+    opacity: 1;
+}
+
+/* The form wraps .modal-body and .modal-footer, so it must itself become
+   the stretching flex child of .modal-content (same pattern as the tall
+   Blotter modals). */
+.register-modal .modal-content > form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Body: the only scrollable region inside the modal. Compact padding, and
+   overscroll containment stops the scroll chain from moving the page
+   behind the modal when the body hits its end. */
+.register-modal .modal-body {
+    padding: 1rem 1.25rem 0.85rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Grid columns never squash; vertical rhythm is compact so all 15 fields
+   stay within reach without excessive scrolling. */
+.register-modal .row.g-3 {
+    --bs-gutter-y: 0.65rem;
+}
+
+.register-modal .row.g-3 > .col {
+    min-width: 0;
+}
+
+.register-modal [class*="col-"] {
+    padding-top: 0.1rem;
+}
+
+/* Labels: block, uppercase, tight. */
+.register-modal .form-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #cbd5e1;
+    margin-bottom: 0.25rem;
+}
+
+/* Controls: typed, standard, readable. Slightly reduced vertical padding
+   (6px) keeps the grid compact without hurting hit targets. */
+.register-modal .form-control {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    color: #0f172a;
+    background-color: #ffffff;
+}
+
+.register-modal .form-control:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.15);
+}
+
+/* Read-only controls (the auto-calculated Age field) read as informational,
+   not interactive. */
+.register-modal .form-control[readonly] {
+    background-color: #f1f5f9;
+    color: #475569;
+    cursor: default;
+}
+
+.register-modal .form-select {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.375rem 0.75rem 0.375rem 2.5rem;
+    font-size: 0.875rem;
+    color: #0f172a;
+    background-color: #ffffff;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%236b7280'%3e%3cpath d='M7.25 11.5V5.75a.5.5 0 0 1 .5-.5h2.5a.5.5 0 0 1 .5.5v5.25a.5.5 0 0 1-.5.5h-2.5a.5.5 0 0 1-.5-.5v-5.75z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+}
+
+.register-modal .form-select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.15);
+}
+
+/* Icon inside a Bootstrap input group (no overlap with the input text).
+   Padding tracks the reduced control height so the addon stays flush. */
+.register-modal .input-group-text {
+    display: flex;
+    align-items: center;
+    padding: 0.3rem 0.55rem;
+    color: #94a3b8;
+}
+
+.register-modal .bi {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+}
+
+/* Field spacing. */
+.register-modal .field-group {
+    margin-bottom: 0.6rem;
+}
+
+/* Footer with primary CTA. flex-shrink: 0 keeps "Cancel" and "Create
+   Account" anchored and visible while the body above scrolls. */
+.register-modal .modal-footer {
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.75rem 1rem;
+    display: flex;
+    gap: 16px;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+.register-modal .btn-outline-secondary {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.06);
+    color: #f1f5f9;
+}
+
+.register-modal .btn-outline-secondary:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #f1f5f9;
+}
+
+/* ------------------------------------------------------------
+   Icon padding is conditional: 2.5rem left padding only when the
+   input sits inside an .input-wrapper that holds an absolutely
+   positioned .input-icon. Standalone inputs keep normal padding.
+   ------------------------------------------------------------ */
+.register-form .form-input {
+    padding-left: 0.75rem;
+}
+
+.register-form .input-wrapper .form-input {
+    padding-left: 2.5rem;
+}
+
+.register-form select.form-select {
+    padding: 0.75rem 2.25rem 0.75rem 0.75rem;
+}
+
+.register-form .input-wrapper select.form-select {
+    padding-left: 2.5rem;
+}
+
+/* Defensive: grid columns never squash below their content width,
+   which keeps fields evenly distributed across each 12-col row. */
+.register-form [class*="col-"] {
+    min-width: 0;
+}
+
+/* ------------------------------------------------------------
+   Success alert on the Login page (shown after registration).
+   Styled to match Bootstrap's alert-success since the Login page
+   does not load the full Bootstrap bundle.
+   ------------------------------------------------------------ */
+.success-alert {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 1.25rem;
+    border: 1px solid #c3e6cb;
+    border-radius: 6px;
+    background-color: #d1e7dd;
+    color: #0f5132;
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+.success-alert .alert-close {
+    flex: 0 0 auto;
+    background: transparent;
+    border: 0;
+    color: #0f5132;
+    opacity: 0.6;
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.success-alert .alert-close:hover {
+    opacity: 1;
+}
+
+/* ------------------------------------------------------------
+   Register modal refinements.
+   ------------------------------------------------------------ */
+
+/* Inside an .input-group the icon addon already occupies the left
+   edge, so the 2.5rem indent used for absolutely positioned icons
+   would double up on selects. */
+.register-modal .input-group .form-select {
+    padding-left: 0.75rem;
+}
+
+/* Validation summary listed at the top of the modal body. */
+.register-modal .register-error-summary {
+    margin-bottom: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid rgba(248, 113, 113, 0.45);
+    border-radius: 6px;
+    background-color: rgba(220, 38, 38, 0.12);
+    color: #fca5a5;
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+/* Invalid field outline that reads on the dark card. */
+.register-modal .form-control.is-invalid,
+.register-modal .form-select.is-invalid {
+    border-color: #ef4444;
+    background-image: none;
+}
+
+.register-modal .form-control.is-invalid:focus,
+.register-modal .form-select.is-invalid:focus {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 0.2rem rgba(239, 68, 68, 0.2);
+}
+
+/* Highlight the input-group wrapper when a field inside is invalid */
+.register-modal .input-group.has-invalid .form-control,
+.register-modal .input-group.has-invalid .form-select {
+    border-color: #ef4444;
+}
+
+.register-modal .input-group.has-invalid .form-control:focus,
+.register-modal .input-group.has-invalid .form-select:focus {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 0.2rem rgba(239, 68, 68, 0.2);
+}
+
+.register-modal .input-group.has-invalid .input-group-text {
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
+/* Inline error text rendered directly below an invalid field. */
+.register-modal .field-error {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.35;
+    color: #f87171;
+}
+
+/* Keep the green CTA readable on the dark footer. */
+.register-modal .btn-success {
+    background-color: #16a34a;
+    border-color: #16a34a;
+}
+
+.register-modal .btn-success:hover,
+.register-modal .btn-success:focus {
+    background-color: #15803d;
+    border-color: #14833c;
+}
+
+
+
+/* ============================================================
+   PASSWORD-RECOVERY PAGES (ForgotPassword, VerifyDetails,
+   ResetPassword)
+   These are Layout = null pages that link this stylesheet and put
+   class="fp-page" on <body>, which centers the shared dark card.
+   Scoping the body rules to that class keeps the Login page itself
+   untouched while the three steps read as one flow.
+   ============================================================ */
+
+.fp-page {
+    min-height: 100vh;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background-color: #0f172a;
+    color: #f1f5f9;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.fp-card {
+    width: 100%;
+    max-width: 440px;
+    background-color: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    padding: 1.75rem 1.5rem 1.5rem;
+}
+
+.fp-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 10px;
+    background-color: rgba(37, 99, 235, 0.18);
+    color: #60a5fa;
+    font-size: 1.25rem;
+    margin-bottom: 0.85rem;
+}
+
+.fp-step {
+    display: inline-block;
+    float: right;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+}
+
+.fp-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin: 0 0 0.35rem;
+}
+
+.fp-sub {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    margin: 0 0 1.25rem;
+    line-height: 1.5;
+}
+
+.fp-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #cbd5e1;
+    margin-bottom: 0.35rem;
+    margin-top: 0.85rem;
+}
+
+.fp-label.first {
+    margin-top: 0;
+}
+
+.fp-input {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: #0f172a;
+    background-color: #ffffff;
+}
+
+.fp-input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.15);
+}
+
+.fp-input.is-invalid {
+    border-color: #ef4444;
+}
+
+.fp-input-wrap {
+    position: relative;
+}
+
+.fp-eye {
+    position: absolute;
+    right: 0.55rem;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 0;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 0.15rem;
+    line-height: 1;
+}
+
+.fp-eye:hover {
+    color: #475569;
+}
+
+.fp-error {
+    color: #f87171;
+    font-size: 0.8rem;
+    margin-top: 0.35rem;
+}
+
+.fp-page .field-validation-valid {
+    display: none;
+}
+
+.fp-btn {
+    width: 100%;
+    border: 0;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #ffffff;
+    background-color: #16a34a;
+    margin-top: 1.15rem;
+}
+
+.fp-btn:hover,
+.fp-btn:focus {
+    background-color: #15803d;
+    color: #ffffff;
+}
+
+.fp-back {
+    display: block;
+    text-align: center;
+    margin-top: 1.1rem;
+    font-size: 0.85rem;
+    color: #93c5fd;
+    text-decoration: none;
+}
+
+.fp-back:hover {
+    color: #bfdbfe;
+    text-decoration: underline;
 }

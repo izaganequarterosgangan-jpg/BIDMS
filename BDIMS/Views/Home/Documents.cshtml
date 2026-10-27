@@ -2,6 +2,22 @@
 @{
     Layout = "_Layout";
     ViewData["Title"] = "Documents";
+
+    // The stored id (REQ-yyyyMMddHHmmss-XXXX) is too long for the table, so render a
+    // compact tail (REQ-XXXX). The full id stays on the row's data-request-id for the
+    // edit/delete handlers.
+    string ShortRequestId(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return "-";
+        }
+
+        var dash = id.LastIndexOf('-');
+        var tail = dash >= 0 && dash < id.Length - 1 ? id[(dash + 1)..] : id;
+
+        return tail.StartsWith("REQ-", StringComparison.OrdinalIgnoreCase) ? tail : "REQ-" + tail;
+    }
 }
 
 <header class="top-header">
@@ -86,7 +102,13 @@
                                 data-resident="@item.Resident"
                                 data-doc-title="@item.Title"
                                 data-doc-status="@item.Status">
-                                <td><strong>@item.Id</strong></td>
+                                <td>
+                                    <strong title="@item.Id">@ShortRequestId(item.Id)</strong>
+                                    @if (!item.IsRead)
+                                    {
+                                        <span class="badge bg-danger ms-1 doc-new-badge">NEW</span>
+                                    }
+                                </td>
                                 <td>@item.Title</td>
                                 <td>@item.Resident</td>
                                 <td><span class="cell-truncate" title="@item.Purpose">@item.Purpose</span></td>
@@ -109,7 +131,7 @@
                                         @if (item.Status == "Approved")
                                         {
                                             <a class="icon-btn-case icon-print" title="Issue Certificate" aria-label="Issue certificate"
-                                               href="@Url.Action("Certificates", "Home", new { issue = "true", resident = item.Resident, title = item.Title, purpose = item.Purpose })">
+                                               href="@Url.Action("Certificates", "Home", new { issue = "true", resident = item.Resident, title = item.Title, purpose = item.Purpose, requestId = item.Id })">
                                                 <i class="bi bi-award"></i>
                                             </a>
                                         }
@@ -228,6 +250,8 @@
                             <option value="In Review">In Review</option>
                             <option value="Processing">Processing</option>
                             <option value="Approved">Approved</option>
+                            <option value="Ready for Pickup">Ready for Pickup</option>
+                            <option value="Printed">Printed</option>
                             <option value="Rejected">Rejected</option>
                         </select>
                     </div>
@@ -240,15 +264,37 @@
     </div>
 </div>
 
-@* View Request Details (resident info, purpose, attachment) *@
-<div class="modal fade" id="docViewModal" tabindex="-1" aria-hidden="true">
+@* View Request Details (resident info, purpose, payment proof) *@
+<div class="modal fade" id="adminViewRequestModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title fw-bold"><i class="bi bi-file-earmark-text"></i> Request Details</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body" id="docViewBody"></div>
+            <div class="modal-body">
+                <div id="docViewBody"></div>
+                <hr />
+                <form asp-controller="Home" asp-action="SaveRequestReply" method="post" id="requestReplyForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="requestId" id="requestReplyRequestId" />
+                    <div class="mb-3">
+                        <label for="adminReplyInput" class="form-label fw-semibold">Admin Reply</label>
+                        <textarea id="adminReplyInput"
+                                  name="adminReply"
+                                  class="form-control"
+                                  rows="4"
+                                  maxlength="2000"
+                                  placeholder="Write feedback or instructions for the resident..."
+                                  required></textarea>
+                    </div>
+                    <div class="text-end">
+                        <button type="submit" class="primary-modal-btn">
+                            <i class="bi bi-send me-1"></i>Save &amp; Send Reply
+                        </button>
+                    </div>
+                </form>
+            </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
@@ -359,6 +405,21 @@
         }
 
         function openDocView(id) {
+            var row = document.querySelector('tr[data-request-id="' + CSS.escape(String(id)) + '"]');
+
+            // Opening a request acknowledges it: clear the row's NEW badge and step the
+            // sidebar counters down without waiting for a reload. Failure here must not
+            // stop the details from opening, so it is fire-and-forget.
+            postJson('/Home/MarkDocumentRequestRead', 'id=' + encodeURIComponent(id))
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    clearInlineNewBadges(row);
+                    if (data && typeof data.remaining === 'number') {
+                        updateSidebarBadges(data.remaining);
+                    }
+                })
+                .catch(function () { /* non-fatal */ });
+
             fetch('/Home/GetDocumentRequest?id=' + encodeURIComponent(id))
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
@@ -387,36 +448,69 @@
                     '<div class="detail-row"><span class="detail-label">Date Filed</span><strong>' + escapeHtml(doc.date) + '</strong></div>' +
                     '<div class="detail-row"><span class="detail-label">Status</span><span class="status-pill ' + statusPillClass(doc.status) + '">' + escapeHtml(doc.status) + '</span></div>' +
                     '<div class="detail-row"><span class="detail-label">Purpose / Notes</span><div class="purpose-text">' + escapeHtml(doc.purpose) + '</div></div>' +
-                    '<div class="detail-row"><span class="detail-label">Attachment</span><div class="attachment-preview">' + attachmentHtml(doc) + '</div></div>' +
+                    '<div class="detail-row"><span class="detail-label">Claim Format</span><div>' + claimFormatHtml(doc) + '</div></div>' +
+                    '<div class="detail-row"><span class="detail-label">Payment Proof</span><div class="attachment-preview">' + paymentProofHtml(doc) + '</div></div>' +
                 '</div>';
 
             document.getElementById('docViewBody').innerHTML = html;
-            var modal = new bootstrap.Modal(document.getElementById('docViewModal'));
+
+            var requestIdField = document.getElementById('requestReplyRequestId');
+            var replyField = document.getElementById('adminReplyInput');
+            if (requestIdField) requestIdField.value = doc.id || '';
+            if (replyField) replyField.value = doc.adminReply || '';
+
+            var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('adminViewRequestModal'));
             modal.show();
         }
 
-        function attachmentHtml(doc) {
-            if (!doc.attachmentUrl || doc.attachmentUrl.length === 0) {
-                return '<span class="text-muted"><i class="bi bi-dash-circle me-1"></i>No attachment provided</span>';
+        function claimFormatHtml(doc) {
+            var format = String(doc.claimFormat || '').trim();
+
+            if (!format) {
+                return '<span class="text-muted"><i class="bi bi-dash-circle me-1"></i>Not specified</span>';
             }
-            // attachmentUrl embeds the client-declared Content-Type, so it must be
-            // restricted to a well-formed data: URI and then attribute-escaped before it
-            // is interpolated into markup. Without this a mime of
-            // image/x" onerror="... closes the attribute and injects a handler.
-            var url = String(doc.attachmentUrl);
-            if (!/^data:(?:[a-z0-9.+-]+\/[a-z0-9.+-]+)?;base64,[A-Za-z0-9+/=]*$/i.test(url)) {
-                return '<span class="text-muted"><i class="bi bi-exclamation-triangle me-1"></i>Attachment could not be displayed</span>';
-            }
-            var safeUrl = escapeHtml(url);
-            var isImage = (doc.attachmentMime || '').indexOf('image/') === 0;
-            var name = escapeHtml(doc.attachmentFileName || 'attachment');
-            if (isImage) {
-                return '<img src="' + safeUrl + '" class="attachment-image" alt="' + name + '" />' +
-                       '<div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="' + safeUrl + '" download="' + name + '">' +
-                       '<i class="bi bi-download me-1"></i>Download ' + name + '</a></div>';
-            }
-            return '<a class="download-link" href="' + safeUrl + '" download="' + name + '">' +
-                   '<i class="bi bi-paperclip me-1"></i>Download ' + name + '</a>';
+
+            // Two clearly different badges so the secretary can tell a digital release
+            // from a printed pickup without reading the label.
+            var isDigital = format.toLowerCase() === 'digital soft copy';
+            var cssClass = isDigital ? 'claim-format-digital' : 'claim-format-printed';
+            var icon = isDigital ? 'bi-cloud-arrow-down' : 'bi-printer';
+
+            return '<span class="claim-format-badge ' + cssClass + '">' +
+                '<i class="bi ' + icon + ' me-1"></i>' + escapeHtml(format) +
+                '</span>';
         }
+
+        function paymentProofHtml(doc) {
+            var reference = escapeHtml(doc.referenceNumber || '');
+            var note = escapeHtml(doc.paymentNote || '');
+            var receiptUrl = String(doc.receiptImageUrl || '');
+
+            if (!reference && !note && !receiptUrl) {
+                return '<span class="text-muted"><i class="bi bi-dash-circle me-1"></i>No payment proof submitted</span>';
+            }
+
+            var html = '';
+
+            if (reference) {
+                html += '<div><span class="text-muted small">GCash reference:</span> <strong>' + reference + '</strong></div>';
+            }
+
+            if (note) {
+                html += '<div class="mt-1"><span class="text-muted small">Note:</span> ' + note + '</div>';
+            }
+
+            // Only the fixed receipts folder is accepted, so a tampered database value
+            // cannot turn this into a javascript: or off-site URL.
+            if (receiptUrl && /^\/uploads\/receipts\/[A-Za-z0-9._-]+$/.test(receiptUrl)) {
+                var safeReceiptUrl = escapeHtml(receiptUrl);
+                html += '<div class="mt-2"><img src="' + safeReceiptUrl + '" class="attachment-image" alt="GCash receipt" />' +
+                        '<div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="' + safeReceiptUrl + '" target="_blank" rel="noopener">' +
+                        '<i class="bi bi-box-arrow-up-right me-1"></i>Open receipt</a></div></div>';
+            }
+
+            return html;
+        }
+
     </script>
 }

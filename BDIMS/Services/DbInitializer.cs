@@ -94,6 +94,7 @@ namespace BDIMS.Services
                         ?? UserAccount.DeriveInitials(AdminDisplayName),
                     IsAdmin = true,
                     IsActive = true,
+                    Status = UserAccountStatus.Active,
                     CreatedUtc = DateTime.UtcNow
                 };
 
@@ -169,9 +170,16 @@ namespace BDIMS.Services
                 profileChanged = true;
             }
 
-            if (!admin.IsActive)
+            // Same reasoning for the registration status: this row is the bootstrap
+            // administrator that guarantees the deployment can always be administered,
+            // so a Pending/Rejected/Blocked state (or a lingering temporary lock left
+            // by an administrator before a restart) is restored here, exactly as the
+            // IsActive flag below has always been restored.
+            if (admin.Status != UserAccountStatus.Active
+                || !admin.IsActive
+                || admin.LockoutEnd.HasValue)
             {
-                admin.IsActive = true;
+                admin.ApplyStatus(UserAccountStatus.Active);
                 profileChanged = true;
             }
 

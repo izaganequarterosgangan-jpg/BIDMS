@@ -11,6 +11,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet" />
     <link rel="stylesheet" href="~/css/login.css" />
 </head>
 <body>
@@ -63,11 +65,33 @@
                     Sign in to your official BIDMS account to continue.
                 </p>
 
+                @* Banner shown after a successful registration - populated by the
+                   modal's fetch handler, or pre-filled from TempData when the page
+                   was reloaded after the post. *@
+                <div class="success-alert" id="registerSuccessAlert"
+                     style="display:@(TempData["RegisterSuccess"] != null ? "flex" : "none")">
+                    <span id="registerSuccessText">@(TempData["RegisterSuccess"] ?? string.Empty)</span>
+                    <button type="button" class="alert-close" aria-label="Close"
+                            onclick="document.getElementById('registerSuccessAlert').style.display='none'">
+                        &times;
+                    </button>
+                </div>
+
+                @* Banner shown after coming back from a completed password reset. *@
+                <div class="success-alert" id="resetSuccessAlert"
+                     style="display:@(TempData["ResetPasswordSuccess"] != null ? "flex" : "none")">
+                    <span id="resetSuccessText">@(TempData["ResetPasswordSuccess"] ?? string.Empty)</span>
+                    <button type="button" class="alert-close" aria-label="Close"
+                            onclick="document.getElementById('resetSuccessAlert').style.display='none'">
+                        &times;
+                    </button>
+                </div>
+
                 <form asp-controller="Account" asp-action="Login" method="post" class="form-group-col">
                     @Html.AntiForgeryToken()
 
                     <!-- Username Field -->
-                    <div class="input-group">
+                    <div class="field-group">
                         <label asp-for="Username" class="input-label"></label>
                         <div class="input-wrapper">
                             <span class="input-icon">
@@ -78,18 +102,18 @@
                     </div>
 
                     <!-- Password Field -->
-                    <div class="input-group">
+                    <div class="field-group">
                         <div class="password-header">
                             <label asp-for="Password" class="input-label"></label>
-                            <a href="#forgot" class="forgot-link">Forgot password?</a>
+                            <a asp-controller="Account" asp-action="ForgotPassword" class="forgot-link">Forgot password?</a>
                         </div>
                         <div class="input-wrapper">
                             <span class="input-icon">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
                             </span>
                             <input asp-for="Password" id="passwordInput" placeholder="Enter your password" class="form-input" autocomplete="current-password" required />
-                            <span class="eye-icon" onclick="togglePasswordVisibility()">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                            <span class="eye-icon" id="togglePassword" data-target="passwordInput" role="button" tabindex="0" aria-label="Show password">
+                                <i class="bi bi-eye"></i>
                             </span>
                         </div>
                     </div>
@@ -107,6 +131,12 @@
                         Sign In to BIDMS &rarr;
                     </button>
                 </form>
+
+                <!-- Registration entry point - opens the Create Resident Account modal -->
+                <p class="register-hint">
+                    Don't have an account?
+                    <a href="#" class="register-link" id="openRegisterLink">Register here</a>
+                </p>
 
                 <div class="divider">
                     <span class="divider-line"></span>
@@ -134,16 +164,252 @@
         </div>
     </div>
 
-    <!-- Password visibility toggle script -->
+    <!-- ============================================================
+         CREATE RESIDENT ACCOUNT MODAL
+         Dark-themed popup card styled by the .register-modal block in
+         login.css. Submitted through fetch to /Account/Register, which
+         answers with JSON so validation errors keep the modal open.
+         ============================================================ -->
+    <div class="register-modal" id="registerModal" role="dialog" aria-modal="true" aria-labelledby="registerModalTitle">
+        <div class="modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="registerModalTitle">Create Resident Account</h5>
+                    <button type="button" class="btn-close" aria-label="Close" onclick="closeRegisterModal()"></button>
+                </div>
+
+                <form id="registerForm" asp-controller="Account" asp-action="Register" method="post" novalidate>
+                    @Html.AntiForgeryToken()
+
+                    <div class="modal-body">
+                        @* Server-side validation errors are listed here, one line per field. *@
+                        <div class="register-error-summary" id="registerErrorSummary" style="display:none"></div>
+
+                        <div class="row g-3">
+                            <!-- FIRST NAME -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regFirstName">FIRST NAME</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                    <input type="text" id="regFirstName" name="FirstName" class="form-control" placeholder="e.g. Juan" autocomplete="given-name" required maxlength="128" />
+                                </div>
+                            </div>
+
+                            <!-- MIDDLE NAME -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regMiddleName">MIDDLE NAME <span class="text-muted small">(Optional)</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                    <input type="text" id="regMiddleName" name="MiddleName" class="form-control" placeholder="e.g. Santos" autocomplete="additional-name" maxlength="128" />
+                                </div>
+                            </div>
+
+                            <!-- LAST NAME -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regLastName">LAST NAME</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                    <input type="text" id="regLastName" name="LastName" class="form-control" placeholder="e.g. Dela Cruz" autocomplete="family-name" required maxlength="128" />
+                                </div>
+                            </div>
+
+                            <!-- SUFFIX (optional) -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regSuffix">SUFFIX <span class="text-muted small">(Optional)</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                    <input type="text" id="regSuffix" name="Suffix" class="form-control" placeholder="e.g. Jr., Sr., III" maxlength="16" />
+                                </div>
+                            </div>
+
+                            <!-- DATE OF BIRTH -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regDob">DATE OF BIRTH</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-calendar"></i></span>
+                                    <input type="date" id="regDob" name="DateOfBirth" class="form-control" required
+                                           min="@DateTime.Today.AddYears(-100).ToString("yyyy-MM-dd")"
+                                           max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                                </div>
+                            </div>
+
+                            <!-- AGE (auto-calculated from the date of birth) -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regAge">AGE</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-hourglass-bottom"></i></span>
+                                    <input type="number" id="regAge" name="Age" class="form-control"
+                                           placeholder="Auto-calculated" min="1" max="150" readonly />
+                                </div>
+                            </div>
+
+                            <!-- SEX / GENDER -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regGender">SEX</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <circle cx="10" cy="14" r="5" />
+                                            <line x1="10" y1="19" x2="10" y2="23" />
+                                            <line x1="8" y1="21" x2="12" y2="21" />
+                                            <line x1="14" y1="10" x2="19" y2="5" />
+                                            <polyline points="15 5 19 5 19 9" />
+                                        </svg>
+                                    </span>
+                                    <select id="regGender" name="Gender" class="form-select" required>
+                                        <option value="" selected disabled>Select sex</option>
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- CIVIL STATUS -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regCivilStatus">CIVIL STATUS <span class="text-muted small">(Optional)</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-heart"></i></span>
+                                    <select id="regCivilStatus" name="CivilStatus" class="form-select">
+                                        <option value="" selected>Select civil status</option>
+                                        <option value="Single">Single</option>
+                                        <option value="Married">Married</option>
+                                        <option value="Widowed">Widowed</option>
+                                        <option value="Separated">Separated</option>
+                                        <option value="Divorced">Divorced</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- PUROK / ZONE -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regPurok">PUROK / ZONE</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
+                                    <select id="regPurok" name="Purok" class="form-select" required>
+                                        <option value="" selected disabled>Select purok</option>
+                                        <option value="Purok 1">Purok 1</option>
+                                        <option value="Purok 2">Purok 2</option>
+                                        <option value="Purok 3">Purok 3</option>
+                                        <option value="Purok 4">Purok 4</option>
+                                        <option value="Purok 5">Purok 5</option>
+                                        <option value="Purok 6">Purok 6</option>
+                                        <option value="Purok 7">Purok 7</option>
+                                        <option value="Purok 8">Purok 8</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- VOTER STATUS -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regVoterStatus">VOTER STATUS</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-person-vcard"></i></span>
+                                    <select id="regVoterStatus" name="VoterStatus" class="form-select" required>
+                                        <option value="" selected disabled>Select status</option>
+                                        <option value="Registered Voter">Registered Voter</option>
+                                        <option value="Non-Voter">Non-Voter</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- EMAIL ADDRESS -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regEmail">EMAIL ADDRESS</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                    <input type="email" id="regEmail" name="Email" class="form-control" placeholder="e.g. juan@email.com" autocomplete="email" required maxlength="256" />
+                                </div>
+                            </div>
+
+                            <!-- CONFIRM EMAIL -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regConfirmEmail">CONFIRM EMAIL</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                    <input type="email" id="regConfirmEmail" name="ConfirmEmail" class="form-control" placeholder="Re-enter email address" autocomplete="email" required maxlength="256" />
+                                </div>
+                            </div>
+
+                            <!-- CONTACT NUMBER -->
+                            <div class="col-md-4">
+                                <label class="form-label" for="regContactNumber">CONTACT NUMBER</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                                    <input type="tel" id="regContactNumber" name="ContactNumber" class="form-control" placeholder="e.g. 09171234567" autocomplete="tel" required maxlength="32" />
+                                </div>
+                            </div>
+
+                            <!-- PASSWORD -->
+                            <div class="col-md-6">
+                                <label class="form-label" for="regPassword">PASSWORD</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                    <input type="password" id="regPassword" name="Password" class="form-control" placeholder="At least 8 characters" autocomplete="new-password" required minlength="8" />
+                                    <button type="button" class="btn btn-outline-secondary toggle-password-btn" data-target="regPassword" aria-label="Show password">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- CONFIRM PASSWORD -->
+                            <div class="col-md-6">
+                                <label class="form-label" for="regConfirmPassword">CONFIRM PASSWORD</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                    <input type="password" id="regConfirmPassword" name="ConfirmPassword" class="form-control" placeholder="Re-enter password" autocomplete="new-password" required minlength="8" />
+                                    <button type="button" class="btn btn-outline-secondary toggle-password-btn" data-target="regConfirmPassword" aria-label="Show password">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" onclick="closeRegisterModal()">Cancel</button>
+                        <button type="submit" class="btn btn-success" id="registerSubmitBtn">Create Account &rarr;</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password visibility toggles: Login eye icon (#togglePassword) and the
+         Register modal buttons (.toggle-password-btn). Every control points at
+         its input through data-target; the click handler flips the input type
+         between password/text and swaps the eye / eye-slash icon. -->
     <script>
-            function togglePasswordVisibility() {
-                const passwordInput = document.getElementById('passwordInput');
-                if (passwordInput.type === 'password') {
-                    passwordInput.type = 'text';
-                } else {
-                    passwordInput.type = 'password';
+        document.addEventListener('DOMContentLoaded', function () {
+            var toggles = document.querySelectorAll('.eye-icon[data-target], .toggle-password-btn[data-target]');
+
+            toggles.forEach(function (btn) {
+                function togglePassword(e) {
+                    e.preventDefault();
+
+                    var input = document.getElementById(btn.getAttribute('data-target'));
+                    if (!input) return;
+
+                    var revealing = input.type === 'password';
+                    input.type = revealing ? 'text' : 'password';
+
+                    var icon = btn.querySelector('.bi');
+                    if (icon) {
+                        icon.classList.toggle('bi-eye', !revealing);
+                        icon.classList.toggle('bi-eye-slash', revealing);
+                    }
+
+                    btn.setAttribute('aria-label', revealing ? 'Hide password' : 'Show password');
                 }
-            }
+
+                btn.addEventListener('click', togglePassword);
+
+                // The Login control is a span with role="button", so also respond
+                // to Enter/Space for keyboard accessibility.
+                btn.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' || e.key === ' ') togglePassword(e);
+                });
+            });
+        });
     </script>
 
     @* This page sets Layout = null, so it loads no scripts by default. The vendored
@@ -152,5 +418,340 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
     <script src="~/lib/jquery-validation-unobtrusive/dist/jquery.validate.unobtrusive.min.js"></script>
+
+    <script>
+        // ---- Create Resident Account modal -------------------------------------
+        const registerModal = document.getElementById('registerModal');
+        const registerForm = document.getElementById('registerForm');
+        const registerErrorSummary = document.getElementById('registerErrorSummary');
+        const registerSubmitBtn = document.getElementById('registerSubmitBtn');
+
+        function openRegisterModal(e) {
+            if (e) e.preventDefault();
+            clearRegisterErrors();
+            registerModal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeRegisterModal() {
+            registerModal.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        document.getElementById('openRegisterLink').addEventListener('click', openRegisterModal);
+
+        // Clicking the blurred backdrop (not the card) closes the modal.
+        registerModal.addEventListener('click', function (e) {
+            if (e.target === registerModal) closeRegisterModal();
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && registerModal.classList.contains('show')) {
+                closeRegisterModal();
+            }
+        });
+
+        function clearRegisterErrors() {
+            registerErrorSummary.style.display = 'none';
+            registerErrorSummary.innerHTML = '';
+            registerForm.querySelectorAll('.field-error').forEach(function (el) {
+                el.remove();
+            });
+            registerForm.querySelectorAll('.is-invalid').forEach(function (el) {
+                el.classList.remove('is-invalid');
+                el.removeAttribute('aria-invalid');
+                el.removeAttribute('aria-describedby');
+            });
+            registerForm.querySelectorAll('.input-group.has-invalid').forEach(function (el) {
+                el.classList.remove('has-invalid');
+            });
+        }
+
+        // Server ModelState keys arrive as "FirstName" etc.; the inputs carry
+        // matching name attributes, but a few key formats are tried for safety.
+        function findRegisterField(key) {
+            const nameVariants = [
+                key,                                       // exact: "FirstName"
+                key.toLowerCase(),                         // lowercase: "firstname"
+                key.charAt(0).toLowerCase() + key.slice(1), // camelCase: "firstName"
+                key.replace(/([A-Z])/g, '_$1').toLowerCase() // snake_case: "first_name"
+            ];
+
+            for (const variant of nameVariants) {
+                const field = registerForm.querySelector('[name="' + variant + '"]');
+                if (field) return field;
+            }
+            return null;
+        }
+
+        // Flags a field as invalid: red border (via .is-invalid / .has-invalid)
+        // plus an inline error message rendered directly below the input.
+        function setFieldError(field, message) {
+            if (!field) return;
+
+            field.classList.add('is-invalid');
+            field.setAttribute('aria-invalid', 'true');
+
+            const wrapper = field.closest('.input-group');
+            if (wrapper) wrapper.classList.add('has-invalid');
+
+            let feedback = field.id ? document.getElementById('fieldError-' + field.id) : null;
+            if (!feedback) {
+                feedback = document.createElement('div');
+                feedback.className = 'field-error';
+                feedback.id = field.id ? 'fieldError-' + field.id : '';
+                (wrapper || field).insertAdjacentElement('afterend', feedback);
+            }
+            feedback.textContent = message;
+            if (field.id) field.setAttribute('aria-describedby', feedback.id);
+        }
+
+        function clearFieldError(field) {
+            if (!field) return;
+
+            field.classList.remove('is-invalid');
+            field.removeAttribute('aria-invalid');
+            field.removeAttribute('aria-describedby');
+
+            const wrapper = field.closest('.input-group');
+            if (wrapper) wrapper.classList.remove('has-invalid');
+
+            if (field.id) {
+                const feedback = document.getElementById('fieldError-' + field.id);
+                if (feedback) feedback.remove();
+            }
+        }
+
+        // Human-readable label ("FIRST NAME" -> "first name") used in inline messages.
+        function fieldLabel(field) {
+            const label = field.id ? registerForm.querySelector('label[for="' + field.id + '"]') : null;
+            if (!label) return 'this field';
+            const text = ((label.childNodes[0] && label.childNodes[0].textContent) || label.textContent || '').trim();
+            return text.toLowerCase() || 'this field';
+        }
+
+        // Turns the browser's Constraint Validation API state into a message
+        // that matches the server-side DataAnnotations wording.
+        function validationMessage(field) {
+            const state = field.validity;
+            const label = fieldLabel(field);
+
+            if (state.valueMissing) {
+                return field.tagName === 'SELECT'
+                    ? 'Please select your ' + label + '.'
+                    : 'Please enter your ' + label + '.';
+            }
+            if (state.typeMismatch) {
+                return field.type === 'email'
+                    ? 'Please enter a valid email address.'
+                    : 'Please enter a valid value.';
+            }
+            if (state.rangeUnderflow || state.rangeOverflow) {
+                if (field.type === 'date') {
+                    return 'Please enter a date between ' + field.min + ' and ' + field.max + '.';
+                }
+                return 'Age must be between ' + field.min + ' and ' + field.max + '.';
+            }
+            if (state.tooShort) {
+                return 'Your ' + label + ' must be at least ' + field.minLength + ' characters.';
+            }
+            if (state.badInput) {
+                return 'Please enter a valid value.';
+            }
+            return 'Please review this field.';
+        }
+
+        function showRegisterErrorSummary(messages) {
+            registerErrorSummary.innerHTML = messages.map(m => `<div>${m}</div>`).join('');
+            registerErrorSummary.style.display = 'block';
+        }
+
+        // Whole years between the birth date and today, counting the year only
+        // once the birthday has passed (a person born today is 0, not 1).
+        function calculateAgeFromDateOfBirth(dateOfBirth) {
+            var today = new Date();
+            var age = today.getFullYear() - dateOfBirth.getFullYear();
+            var monthDiff = today.getMonth() - dateOfBirth.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateOfBirth.getDate())) {
+                age--;
+            }
+            return age;
+        }
+
+        // Picking a date of birth fills the read-only Age field; the server
+        // recomputes the same value from DateOfBirth before saving.
+        document.getElementById('regDob').addEventListener('change', function () {
+            var ageField = document.getElementById('regAge');
+            if (!this.value) {
+                ageField.value = '';
+                return;
+            }
+
+            // Parse as a local date (not UTC) so time-zone offsets can never
+            // shift the birthday by a day.
+            var dateOfBirth = new Date(this.value + 'T00:00:00');
+            if (isNaN(dateOfBirth.getTime())) {
+                ageField.value = '';
+                return;
+            }
+
+            var age = calculateAgeFromDateOfBirth(dateOfBirth);
+            ageField.value = age >= 0 && age <= 150 ? age : '';
+        });
+
+        registerForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            clearRegisterErrors();
+
+            // Native constraint validation (required / minlength / type rules),
+            // surfaced through the modal's own inline error UI instead of the
+            // browser's default tooltips: every invalid input gets the red
+            // border and an error message below the field.
+            if (!registerForm.checkValidity()) {
+                registerForm.querySelectorAll('input, select').forEach(function (field) {
+                    if (!field.checkValidity()) {
+                        setFieldError(field, validationMessage(field));
+                    }
+                });
+                showRegisterErrorSummary(['Please review the highlighted fields.']);
+                const firstInvalid = registerForm.querySelector('.is-invalid');
+                if (firstInvalid) firstInvalid.focus();
+                return;
+            }
+
+            // Email and password confirmation are matched here before the round trip,
+            // and again server-side in AccountController.Register.
+            const email = document.getElementById('regEmail').value.trim();
+            const confirmEmailField = document.getElementById('regConfirmEmail');
+            const confirmEmail = confirmEmailField.value.trim();
+            if (email.toLowerCase() !== confirmEmail.toLowerCase()) {
+                setFieldError(confirmEmailField, 'The email addresses do not match.');
+                showRegisterErrorSummary(['The email addresses do not match.']);
+                confirmEmailField.focus();
+                return;
+            }
+
+            const password = document.getElementById('regPassword').value;
+            const confirmPasswordField = document.getElementById('regConfirmPassword');
+            const confirmPassword = confirmPasswordField.value;
+            if (password !== confirmPassword) {
+                setFieldError(confirmPasswordField, 'The passwords do not match.');
+                showRegisterErrorSummary(['The passwords do not match.']);
+                confirmPasswordField.focus();
+                return;
+            }
+
+            registerSubmitBtn.disabled = true;
+
+            try {
+                // FormData carries the antiforgery token alongside the fields.
+                // credentials: 'same-origin' ensures the antiforgery cookie is sent.
+                const response = await fetch(registerForm.action, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    body: new FormData(registerForm)
+                });
+
+                // Safely parse JSON - handle non-JSON responses (e.g., HTML error pages)
+                let result;
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    result = await response.json();
+                } else {
+                    const text = await response.text();
+                    throw new Error(`Server returned non-JSON response (${response.status}): ${text.substring(0, 200)}`);
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${result.message || 'Unknown error'}`);
+                }
+
+                if (result.success) {
+                    closeRegisterModal();
+                    registerForm.reset();
+                    document.getElementById('registerSuccessText').textContent = result.message;
+                    document.getElementById('registerSuccessAlert').style.display = 'flex';
+                } else {
+                    // Use the flat messages array from backend if available, otherwise build from errors object
+                    const messages = result.messages && result.messages.length
+                        ? result.messages
+                        : (result.errors ? Object.values(result.errors).flat() : []);
+
+                    // Mark invalid fields and render each server message inline,
+                    // directly below the field it belongs to.
+                    if (result.errors) {
+                        Object.keys(result.errors).forEach(function (key) {
+                            if (!key) return; // model-level errors have no field to highlight
+                            const field = findRegisterField(key);
+                            if (field) {
+                                const detail = (result.errors[key] || []).join(' ');
+                                setFieldError(field, detail || 'This field is invalid.');
+                            } else {
+                                console.warn('Could not find field for validation key:', key);
+                            }
+                        });
+                    }
+
+                    // Fall back to the flat message, then a generic hint, so the
+                    // summary never claims fields are highlighted when they are not.
+                    const summary = messages.length
+                        ? messages
+                        : [result.message || 'Please review the highlighted fields.'];
+                    showRegisterErrorSummary(summary);
+
+                    const firstInvalid = registerForm.querySelector('.is-invalid');
+                    if (firstInvalid) firstInvalid.focus();
+                }
+            } catch (err) {
+                console.error('Registration error:', err);
+                showRegisterErrorSummary([err.message || 'Something went wrong while creating the account. Please try again.']);
+            } finally {
+                registerSubmitBtn.disabled = false;
+            }
+        });
+
+        // Once a field is flagged, re-check it as the user edits it and clear the
+        // red border / inline message as soon as the value becomes valid. The
+        // email and password pairs are re-checked together so a resolved mismatch
+        // disappears even when the user edits the first field of the pair.
+        function revalidateField(field) {
+            if (!field || !field.classList.contains('is-invalid')) return;
+
+            if (field.name === 'ConfirmEmail') {
+                if (!field.checkValidity()) {
+                    setFieldError(field, validationMessage(field));
+                } else if (document.getElementById('regEmail').value.trim().toLowerCase() !== field.value.trim().toLowerCase()) {
+                    setFieldError(field, 'The email addresses do not match.');
+                } else {
+                    clearFieldError(field);
+                }
+                return;
+            }
+
+            if (field.name === 'ConfirmPassword') {
+                if (!field.checkValidity()) {
+                    setFieldError(field, validationMessage(field));
+                } else if (document.getElementById('regPassword').value !== field.value) {
+                    setFieldError(field, 'The passwords do not match.');
+                } else {
+                    clearFieldError(field);
+                }
+                return;
+            }
+
+            if (field.checkValidity()) clearFieldError(field);
+        }
+
+        function onRegisterFieldEdit(e) {
+            const field = e.target;
+            if (!field || !field.name) return;
+            revalidateField(field);
+            if (field.name === 'Email') revalidateField(document.getElementById('regConfirmEmail'));
+            if (field.name === 'Password') revalidateField(document.getElementById('regConfirmPassword'));
+        }
+
+        registerForm.addEventListener('input', onRegisterFieldEdit);
+        registerForm.addEventListener('change', onRegisterFieldEdit);
+    </script>
 </body>
 </html>

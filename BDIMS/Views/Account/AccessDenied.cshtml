@@ -1,0 +1,39 @@
+@{
+    ViewData["Title"] = "Access Denied";
+
+    // Residents (and anyone not signed in) get the resident shell; only an
+    // administrator sees the back-office sidebar. The action that sends them here
+    // could have been reached by either kind of account, so the page picks the same
+    // layout the visitor is used to rather than showing an admin sidebar to a resident.
+    var isAdmin = User.IsInRole("Administrator");
+    Layout = isAdmin ? "_Layout" : "_ResidentLayout";
+
+    var dashboardUrl = isAdmin
+        ? Url.Action("Dashboard", "Home") ?? "/Home/Dashboard"
+        : Url.Action("Dashboard", "Resident") ?? "/Resident/Dashboard";
+}
+
+<div class="d-flex justify-content-center align-items-center py-5">
+    <div class="text-center" style="max-width: 520px;">
+        <div class="mb-3">
+            <span class="d-inline-flex align-items-center justify-content-center"
+                  style="width:72px;height:72px;border-radius:50%;background:#fef3c7;color:#d97706;">
+                <i class="bi bi-shield-lock-fill fs-2"></i>
+            </span>
+        </div>
+        <h1 class="h3 fw-bold mb-2">Access denied</h1>
+        <p class="text-muted mb-2">
+            You are signed in, but your account does not have permission to open that page.
+        </p>
+        <p class="text-muted mb-4">
+            If you followed a notification link, it may point at an administrator-only
+            screen. Use the button below to return to your dashboard.
+        </p>
+        <a href="@dashboardUrl" class="btn btn-primary">
+            <i class="bi bi-grid-fill me-1"></i> Back to my dashboard
+        </a>
+        <div class="mt-3">
+            <a href="/Resident/Dashboard" class="small text-decoration-none">Go to Resident Dashboard</a>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,51 @@
+@* Fully client-side routing for the resident header "Search services..." bar.
+   The bar is rendered per resident page (Dashboard, Profile, Requests, Announcements,
+   Settings), so the behaviour is defined once here and included by the layouts. Pressing
+   Enter maps the typed keywords onto the matching resident section instead of blindly
+   submitting the form; when no keyword matches, the form's normal GET submit is allowed
+   to run. The selector is scoped to .resident-search so the admin search boxes, which
+   also use name="searchQuery", are never hijacked. *@
+<script>
+    (function () {
+        var routes = [
+            { keywords: ['request', 'clearance', 'certificate', 'document'], url: '/Resident/Requests', withQuery: true },
+            { keywords: ['announcement', 'news', 'event'], url: '/Resident/Announcements', withQuery: true },
+            { keywords: ['profile', 'account'], url: '/Resident/Profile', withQuery: false },
+            { keywords: ['settings', 'password', 'dark'], url: '/Resident/Settings', withQuery: false }
+        ];
+
+        function resolveRoute(query) {
+            var lower = query.toLowerCase();
+            for (var i = 0; i < routes.length; i++) {
+                for (var j = 0; j < routes[i].keywords.length; j++) {
+                    if (lower.indexOf(routes[i].keywords[j]) !== -1) {
+                        return routes[i];
+                    }
+                }
+            }
+            return null;
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter' || event.defaultPrevented) {
+                return;
+            }
+
+            var input = event.target;
+            if (!input || input.tagName !== 'INPUT' || !input.closest || !input.closest('.resident-search')) {
+                return;
+            }
+
+            var query = (input.value || '').trim();
+            var route = resolveRoute(query);
+            if (!route) {
+                return;
+            }
+
+            event.preventDefault();
+            window.location.href = (route.withQuery && query)
+                ? route.url + '?search=' + encodeURIComponent(query)
+                : route.url;
+        });
+    })();
+</script>

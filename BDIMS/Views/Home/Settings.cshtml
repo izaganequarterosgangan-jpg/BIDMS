@@ -41,7 +41,7 @@
                         <i class="bi bi-bell"></i>
                         <span id="notifBadgeSettings" class="notif-badge" style="display:none">0</span>
                     </button>
-                    <div id="notifDropdown" class="notif-dropdown" aria-hidden="true"></div>
+                    <div id="notifDropdown" class="notif-dropdown" aria-hidden="true" data-endpoint-prefix="/Notification"></div>
                 </div>
 
                 <!-- User Profile Initials Avatar -->
@@ -115,8 +115,32 @@
                     <h2>Certificate Template Editor</h2>
                     <p>Design the printable layout, letterhead and logos for each certificate type.</p>
                 </div>
-                <button type="button" class="btn-add-certificate template-editor-open" onclick="openTemplateEditorModal()">
+                <a asp-controller="Home" asp-action="CertificateTemplateEditor" class="btn-add-certificate template-editor-open">
                     <i class="bi bi-magic me-1"></i> Open Template Editor
+                </a>
+            </div>
+        </div>
+
+        <!-- ONLINE PAYMENT METHODS CARD (GCash QR + account details) -->
+        @* Sits directly below the Template Editor card. The button opens
+           #paymentMethodModal, where an admin uploads the GCash QR image and
+           edits the account name / mobile number residents pay to. *@
+        <div class="settings-card template-editor-card">
+            <div class="card-header card-header-with-action">
+                <div>
+                    <h2>Online Payment Methods</h2>
+                    <p>Manage the payment method, QR code, and account details residents use for online certificate payments.</p>
+                    @if (Model.HasGcashQr)
+                    {
+                        <span class="badge bg-success mt-1"><i class="bi bi-check-circle me-1"></i>QR uploaded</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary mt-1"><i class="bi bi-exclamation-circle me-1"></i>No QR yet</span>
+                    }
+                </div>
+                <button type="button" class="btn-add-certificate" onclick="openPaymentMethodModal()">
+                    <i class="bi bi-credit-card me-1"></i> Edit Payment Settings
                 </button>
             </div>
         </div>
@@ -215,7 +239,6 @@
                                     <th>Requires Residency</th>
                                     <th>Status</th>
                                     <th>Template</th>
-                                    <th>Format</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
@@ -230,14 +253,69 @@
                                             <span class="row-index">@(i + 1)</span>
                                             <input type="hidden" name="Certificates[@i].Id" value="@Model.Certificates[i].Id" />
                                         </td>
-                                        <td>
-                                            <input type="hidden" class="cert-type-value" name="Certificates[@i].Type" value="@Model.Certificates[i].Type" />
-                                            <strong>@Model.Certificates[i].Type</strong>
+                                        <td class="cert-name-cell">
+                                            @* Certificate name shown as plain text + pencil icon.
+                                               Hidden Format/Template/IsCustom keep non-null values
+                                               on save so the DB never receives null. *@
+                                            <div class="cert-name-view">
+                                                <span class="cert-name-text" id="certText_@Model.Certificates[i].Id" title="Click to edit" onclick="startCertNameEdit(this)">@Model.Certificates[i].Type</span>
+                                                <button type="button" class="cert-name-edit-btn" title="Edit certificate name"
+                                                        onclick="startCertNameEdit(this)" aria-label="Edit certificate name">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                </button>
+                                            </div>
+                                            <div class="cert-name-edit" style="display:none;">
+                                                <input type="text" class="cert-name-input"
+                                                       name="Certificates[@i].Type"
+                                                       value="@Model.Certificates[i].Type"
+                                                       placeholder="Certificate Type"
+                                                       aria-label="Certificate type name"
+                                                       data-cert-id="@Model.Certificates[i].Id"
+                                                       data-original="@Model.Certificates[i].Type"
+                                                       onkeydown="certNameInputKey(event, this)" />
+                                                <button type="button" class="cert-name-save-btn" title="Save"
+                                                        onclick="saveCertName(this)" aria-label="Save certificate name">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                                <button type="button" class="cert-name-cancel-btn" title="Cancel"
+                                                        onclick="cancelCertNameEdit(this)" aria-label="Cancel editing">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            </div>
+                                            <input type="hidden" class="cert-template-hidden" name="Certificates[@i].Template" value="@(Model.Certificates[i].Template ?? string.Empty)" />
+                                            <input type="hidden" class="cert-iscustom-hidden" name="Certificates[@i].IsCustom" value="@(Model.Certificates[i].IsCustom ? "true" : "false")" />
                                         </td>
-                                        <td>
-                                            <div class="fee-input">
-                                                <span>₱</span>
-                                                <input type="number" name="Certificates[@i].Fee" value="@Model.Certificates[i].Fee" min="0" step="0.01" />
+                                        <td class="cert-fee-cell">
+                                            @* Fee shown as clean 2-decimal text + pencil icon.
+                                               Clicking swaps in a number input + checkmark save.
+                                               Enter/save POSTs /Home/UpdateCertificateFee. *@
+                                            <div class="cert-fee-view">
+                                                <span class="cert-fee-text" id="certFeeText_@Model.Certificates[i].Id" title="Click to edit" onclick="startCertFeeEdit(this)">@("₱ " + Model.Certificates[i].Fee.ToString("N2"))</span>
+                                                <button type="button" class="cert-name-edit-btn" title="Edit fee"
+                                                        onclick="startCertFeeEdit(this)" aria-label="Edit fee">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                </button>
+                                            </div>
+                                            <div class="cert-fee-edit" style="display:none;">
+                                                <div class="fee-input">
+                                                    <span>₱</span>
+                                                    <input type="number" class="cert-fee-input"
+                                                           name="Certificates[@i].Fee"
+                                                           value="@Model.Certificates[i].Fee.ToString("F2")"
+                                                           min="0" step="0.01"
+                                                           aria-label="Certificate fee"
+                                                           data-cert-id="@Model.Certificates[i].Id"
+                                                           data-original="@Model.Certificates[i].Fee.ToString("F2")"
+                                                           onkeydown="certFeeInputKey(event, this)" />
+                                                </div>
+                                                <button type="button" class="cert-name-save-btn" title="Save"
+                                                        onclick="saveCertificateFee(this)" aria-label="Save fee">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                                <button type="button" class="cert-name-cancel-btn" title="Cancel"
+                                                        onclick="cancelCertFeeEdit(this)" aria-label="Cancel editing">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
                                             </div>
                                         </td>
                                         <td>
@@ -256,23 +334,20 @@
                                             <span class="template-status @(hasLayout ? "is-set" : "is-missing")">
                                                 @(hasLayout ? "Custom" : "Default")
                                             </span>
-                                            <button type="button"
-                                                    class="icon-btn btn-template-cert @(hasLayout ? "" : "needs-attention")"
-                                                    title="Paste or upload the template for @Model.Certificates[i].Type"
-                                                    onclick="openTemplateModal(this)">
+                                            <a asp-controller="Home"
+                                               asp-action="CertificateTemplateEditor"
+                                               asp-route-id="@Model.Certificates[i].Id"
+                                               class="icon-btn btn-template-cert @(hasLayout ? "" : "needs-attention")"
+                                               title="Open the template editor for @Model.Certificates[i].Type">
                                                 <i class="bi bi-file-earmark-richtext"></i>
-                                            </button>
-                                        </td>
-                                        <td>
-                                            <textarea class="format-store" name="Certificates[@i].Format" style="display:none">@Model.Certificates[i].Format</textarea>
-                                            <button type="button" class="icon-btn btn-format-cert" title="Set legacy plain-text Format" onclick="openFormatModal(this)">
-                                                <i class="bi bi-file-earmark-text"></i>
-                                            </button>
+                                            </a>
                                         </td>
                                         <td>
                                             <button type="button" class="btn-remove-cert" title="Remove" onclick="removeCertificateRow(this)">
                                                 <i class="bi bi-trash"></i>
                                             </button>
+                                            @* Kept hidden so bulk Save still posts a non-null Format value. *@
+                                            <input type="hidden" class="format-store" name="Certificates[@i].Format" value="@(Model.Certificates[i].Format ?? string.Empty)" />
                                         </td>
                                     </tr>
                                 }
@@ -320,19 +395,20 @@
                               enctype="multipart/form-data">
                             @Html.AntiForgeryToken()
                             <input type="hidden" id="templateModalName" name="certificateName" value="" />
+                            <input type="hidden" id="templateModalId" name="certificateId" value="0" />
 
                             <div class="modal-body">
+                                @* Quick-launch modal for one fee-table row. The paste box was
+                                   removed: placeholder badge tags + file uploader stay, and
+                                   the footer routes to the official Template Editor page. *@
                                 <p class="text-muted">
-                                    Paste your layout below, or upload a <strong>.docx</strong> /
-                                    <strong>.html</strong> file (max 8&nbsp;MB). This replaces the printable
-                                    layout for this certificate only.
+                                    You can copy these placeholders into the official template
+                                    editor, or upload a <strong>.docx</strong> /
+                                    <strong>.html</strong> file (max 8&nbsp;MB) below.
                                 </p>
 
                                 <div class="template-modal-current" id="templateModalCurrent"></div>
 
-                                <label class="template-modal-label" for="templateModalText">
-                                    Paste layout
-                                </label>
                                 <div class="format-hint">
                                     @foreach (var token in Model.TemplateTokens)
                                     {
@@ -342,24 +418,19 @@
                                                 onclick="copyToken('@token.Placeholder')">@token.Placeholder</button>
                                     }
                                 </div>
-                                <textarea id="templateModalText"
-                                          class="form-control"
-                                          name="pastedHtml"
-                                          rows="12"
-                                          placeholder="Paste your certificate layout here, including the placeholders above."></textarea>
 
                                 <label class="template-modal-label" for="templateModalFile">
                                     &hellip;or upload a document
                                 </label>
                                 <input type="file" id="templateModalFile" name="file" class="form-control" accept=".docx,.html,.htm" />
                                 <p class="template-modal-hint">
-                                    An uploaded file wins over pasted text. Embedded images are inlined automatically.
+                                    Layout editing happens in the official Template Editor page.
                                 </p>
                             </div>
                             <div class="modal-footer">
                                 <button type="button" class="secondary-btn" data-bs-dismiss="modal">Cancel</button>
-                                <button type="submit" class="primary-modal-btn" id="templateModalSave">
-                                    <i class="bi bi-check2 me-1"></i> Save Template
+                                <button type="button" class="primary-modal-btn" onclick="openOfficialEditor()">
+                                    <i class="bi bi-pencil-square me-1"></i> Open Template Editor
                                 </button>
                             </div>
                         </form>
@@ -457,6 +528,29 @@
                 </div>
             </form>
 
+            <!-- Appearance (client-side only). The dark-mode choice is stored under the
+                 admin-only "admin_theme" localStorage key, so it is fully isolated from
+                 the resident portal's "resident_theme" and never touches the database. -->
+            <div class="settings-card">
+                <div class="card-header">
+                    <h2>Appearance</h2>
+                    <p>Choose how the admin portal looks on this device.</p>
+                </div>
+
+                <div class="settings-list">
+                    <div class="setting-item">
+                        <div>
+                            <h3>Dark Mode</h3>
+                            <p>Applies across every page of the admin portal.</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="adminDarkModeSwitch" />
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
             <!-- DATABASE MANAGEMENT & BACKUPS -->
             @* Sits outside the Save Changes form on purpose: the download is a
                standalone GET that streams a .sql file, so it must not be tied to the
@@ -543,12 +637,324 @@
             </div>
         </div>
 
+        <!-- ONLINE PAYMENT METHODS MODAL: upload the GCash QR image and edit the
+             account name / mobile number residents pay to. Posts to
+             /Home/SavePaymentSettings, which stores the QR at
+             wwwroot/uploads/gcash_qr.png and persists the details in AppSettings. -->
+        <div id="paymentMethodModal" class="modal fade" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+                    <form asp-controller="Home"
+                          asp-action="SavePaymentSettings"
+                          method="post"
+                          enctype="multipart/form-data">
+                        @Html.AntiForgeryToken()
+                        <div class="modal-header">
+                            <h5 class="modal-title">Online Payment Methods</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="template-card-copy">
+                                Set the payment method name, upload the barangay's QR code, and fill in the
+                                account details residents will use for online certificate payments.
+                            </p>
+
+                            <div class="form-group mb-3">
+                                <label class="template-modal-label" for="paymentMethodName">Payment Method Name</label>
+                                <input type="text"
+                                       id="paymentMethodName"
+                                       name="paymentMethodName"
+                                       class="form-control"
+                                       value="@Model.PaymentMethodName"
+                                       maxlength="50"
+                                       placeholder="e.g. GCash, PayMaya, Maya, or Bank Transfer" />
+                                <p class="small text-muted mt-1">Shown to residents on the payment modal and reference field.</p>
+                            </div>
+
+                            @if (Model.HasGcashQr)
+                            {
+                                <div class="text-center mb-3">
+                                    <img src="~/uploads/gcash_qr.png?@DateTime.Now.Ticks"
+                                         alt="Payment QR Code"
+                                         style="max-height:180px; border:1px solid #e5e7eb; border-radius:8px; padding:4px; background:#fff;" />
+                                    <p class="small text-muted mt-1 mb-0">Current QR on file. Upload a new image to replace it.</p>
+                                </div>
+                            }
+
+                            <div class="form-group mb-3">
+                                <label class="template-modal-label" for="gcashQr">Payment QR Code image</label>
+                                <input type="file"
+                                       id="gcashQr"
+                                       name="gcashQr"
+                                       class="form-control"
+                                       accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" />
+                                <p class="small text-muted mt-1">Leave blank to keep the current image. PNG, JPG or WEBP.</p>
+                            </div>
+
+                            <div class="form-group mb-3">
+                                <label class="template-modal-label" for="gcashAccountName">Account Name</label>
+                                <input type="text"
+                                       id="gcashAccountName"
+                                       name="gcashAccountName"
+                                       class="form-control"
+                                       value="@Model.GcashAccountName"
+                                       placeholder="e.g. Barangay Governor Boyles" />
+                            </div>
+
+                            <div class="form-group mb-0">
+                                <label class="template-modal-label" for="gcashAccountNumber">Mobile / Account Number</label>
+                                <input type="text"
+                                       id="gcashAccountNumber"
+                                       name="gcashAccountNumber"
+                                       class="form-control"
+                                       value="@Model.GcashAccountNumber"
+                                       placeholder="e.g. 0917 123 4567" />
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="secondary-btn" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="primary-modal-btn">
+                                <i class="bi bi-check2 me-1"></i> Save Payment Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
 
     </div>
 </div>
 
 @section Scripts {
     <script>
+        // ---------- Inline certificate-name editing ----------
+        // Each Certificate Type cell renders plain text + a pencil icon.
+        // Clicking either swaps the cell into edit mode (input + checkmark
+        // save + cancel). Enter saves via /Home/UpdateCertificateName and
+        // returns to text mode; Escape cancels and restores the original.
+        function certNameCell(trigger) {
+            var cell = trigger ? trigger.closest('.cert-name-cell') : null;
+            return cell;
+        }
+
+        function showCertNameView(cell, text) {
+            if (!cell) return;
+            var view = cell.querySelector('.cert-name-view');
+            var edit = cell.querySelector('.cert-name-edit');
+            var label = cell.querySelector('[data-cert-name-text]');
+            var input = cell.querySelector('.cert-name-input');
+            if (label && typeof text === 'string') label.textContent = text;
+            if (input && typeof text === 'string') {
+                input.value = text;
+                input.setAttribute('data-original', text);
+            }
+            if (view) view.style.display = '';
+            if (edit) edit.style.display = 'none';
+        }
+
+        function startCertNameEdit(trigger) {
+            var cell = certNameCell(trigger);
+            if (!cell) return;
+            var view = cell.querySelector('.cert-name-view');
+            var edit = cell.querySelector('.cert-name-edit');
+            var input = cell.querySelector('.cert-name-input');
+            if (view) view.style.display = 'none';
+            if (edit) edit.style.display = '';
+            if (input) {
+                if (!input.getAttribute('data-original')) {
+                    input.setAttribute('data-original', input.value || '');
+                }
+                input.focus();
+                try { input.select(); } catch (e) { /* selection optional */ }
+            }
+        }
+
+        function cancelCertNameEdit(trigger) {
+            var cell = certNameCell(trigger);
+            if (!cell) return;
+            var input = cell.querySelector('.cert-name-input');
+            var original = input ? (input.getAttribute('data-original') || '') : '';
+            showCertNameView(cell, original);
+        }
+
+        function certNameInputKey(event, input) {
+            if (!event) return;
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                saveCertName(input);
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelCertNameEdit(input);
+            }
+        }
+
+        function certNameAntiForgeryToken() {
+            var tokenInput = document.querySelector('#documentsSettingsForm input[name="__RequestVerificationToken"]');
+            return tokenInput ? tokenInput.value : '';
+        }
+
+        function saveCertName(trigger) {
+            saveCertificateName(trigger);
+        }
+
+        // Inline rename: POSTs JSON { id, name } and updates the #certText_{id}
+        // label ONLY after a successful JSON response, so the saved name
+        // persists on page refresh (it was written to MySQL server-side).
+        function saveCertificateName(trigger) {
+            var cell = certNameCell(trigger);
+            if (!cell) return;
+            var input = cell.querySelector('.cert-name-input');
+            if (!input) return;
+            var id = parseInt(input.getAttribute('data-cert-id') || '0', 10) || 0;
+            var newName = (input.value || '').trim();
+            if (!id) {
+                if (typeof showToast === 'function') showToast('Save the row first before renaming it.', 'error');
+                input.focus();
+                return;
+            }
+            if (!newName) {
+                if (typeof showToast === 'function') showToast('Certificate name cannot be empty.', 'error');
+                input.focus();
+                return;
+            }
+            fetch('/Home/UpdateCertificateName', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': certNameAntiForgeryToken()
+                },
+                body: JSON.stringify({ id: id, name: newName })
+            }).then(function (res) {
+                if (!res.ok) throw new Error('Request failed with status ' + res.status);
+                return res.json();
+            }).then(function (data) {
+                if (data && data.success) {
+                    var savedName = data.newName || newName;
+                    var label = document.getElementById('certText_' + id);
+                    if (label) label.textContent = savedName;
+                    showCertNameView(cell, savedName);
+                    if (typeof showToast === 'function') showToast('Certificate name saved.', 'success');
+                } else {
+                    var message = (data && data.message) ? data.message : 'Could not save the certificate name.';
+                    if (typeof showToast === 'function') showToast(message, 'error');
+                }
+            }).catch(function () {
+                if (typeof showToast === 'function') showToast('Could not save the certificate name.', 'error');
+            });
+        }
+
+        // ---------- Inline certificate-fee editing ----------
+        // Mirrors the Certificate Type pattern: fee renders as "₱ 30.00" text +
+        // pencil icon. Clicking swaps in a number input + checkmark save.
+        // Enter/save POSTs JSON { id, fee } to /Home/UpdateCertificateFee and
+        // refreshes the text instantly from the server response.
+        function certFeeCell(trigger) {
+            var cell = trigger ? trigger.closest('.cert-fee-cell') : null;
+            return cell;
+        }
+
+        function formatFeeText(value) {
+            var num = parseFloat(value);
+            if (isNaN(num)) num = 0;
+            return '₱ ' + num.toFixed(2);
+        }
+
+        function showCertFeeView(cell, value) {
+            if (!cell) return;
+            var view = cell.querySelector('.cert-fee-view');
+            var edit = cell.querySelector('.cert-fee-edit');
+            var label = cell.querySelector('.cert-fee-text');
+            var input = cell.querySelector('.cert-fee-input');
+            if (label && typeof value !== 'undefined') label.textContent = formatFeeText(value);
+            if (input && typeof value !== 'undefined') {
+                var normalized = parseFloat(value);
+                input.value = isNaN(normalized) ? '0.00' : normalized.toFixed(2);
+                input.setAttribute('data-original', input.value);
+            }
+            if (view) view.style.display = '';
+            if (edit) edit.style.display = 'none';
+        }
+
+        function startCertFeeEdit(trigger) {
+            var cell = certFeeCell(trigger);
+            if (!cell) return;
+            var view = cell.querySelector('.cert-fee-view');
+            var edit = cell.querySelector('.cert-fee-edit');
+            var input = cell.querySelector('.cert-fee-input');
+            if (view) view.style.display = 'none';
+            if (edit) edit.style.display = '';
+            if (input) {
+                if (!input.getAttribute('data-original')) {
+                    input.setAttribute('data-original', input.value || '0.00');
+                }
+                input.focus();
+                try { input.select(); } catch (e) { /* selection optional */ }
+            }
+        }
+
+        function cancelCertFeeEdit(trigger) {
+            var cell = certFeeCell(trigger);
+            if (!cell) return;
+            var input = cell.querySelector('.cert-fee-input');
+            var original = input ? (input.getAttribute('data-original') || '0.00') : '0.00';
+            showCertFeeView(cell, original);
+        }
+
+        function certFeeInputKey(event, input) {
+            if (!event) return;
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                saveCertificateFee(input);
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelCertFeeEdit(input);
+            }
+        }
+
+        function saveCertificateFee(trigger) {
+            var cell = certFeeCell(trigger);
+            if (!cell) return;
+            var input = cell.querySelector('.cert-fee-input');
+            if (!input) return;
+            var id = parseInt(input.getAttribute('data-cert-id') || '0', 10) || 0;
+            var fee = parseFloat((input.value || '').trim());
+            if (!id) {
+                if (typeof showToast === 'function') showToast('Save the row first before editing its fee.', 'error');
+                input.focus();
+                return;
+            }
+            if (isNaN(fee) || fee < 0) {
+                if (typeof showToast === 'function') showToast('Enter a valid fee of 0 or more.', 'error');
+                input.focus();
+                return;
+            }
+            fetch('/Home/UpdateCertificateFee', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': certNameAntiForgeryToken()
+                },
+                body: JSON.stringify({ id: id, fee: fee })
+            }).then(function (res) {
+                if (!res.ok) throw new Error('Request failed with status ' + res.status);
+                return res.json();
+            }).then(function (data) {
+                if (data && data.success) {
+                    var savedFee = (typeof data.newFee !== 'undefined') ? data.newFee : fee;
+                    var label = document.getElementById('certFeeText_' + id);
+                    if (label) label.textContent = formatFeeText(savedFee);
+                    showCertFeeView(cell, savedFee);
+                    if (typeof showToast === 'function') showToast('Fee saved.', 'success');
+                } else {
+                    var message = (data && data.message) ? data.message : 'Could not save the fee.';
+                    if (typeof showToast === 'function') showToast(message, 'error');
+                }
+            }).catch(function () {
+                if (typeof showToast === 'function') showToast('Could not save the fee.', 'error');
+            });
+        }
+
         // The top "Save Changes" button is outside the tabs, so it has to find the
         // form belonging to whichever tab is on screen. Only one tab's form is
         // rendered at a time, but a hidden modal form can still match a loose
@@ -579,14 +985,17 @@
             row.innerHTML =
                 '<td><span class="row-index"></span>' +
                 '<input type="hidden" name="newrow.Id" value="0" /></td>' +
-                '<td><input type="text" name="newrow.Type" class="cert-type-input cert-type-value" placeholder="Certificate Type" /></td>' +
+                '<td><input type="text" name="newrow.Type" class="cert-type-input cert-type-value cert-name-input" placeholder="Certificate Type" data-cert-id="0" data-original="" onkeydown="certNameInputKey(event, this)" />' +
+                '<input type="hidden" name="newrow.Format" value="" />' +
+                '<input type="hidden" name="newrow.Template" value="" />' +
+                '<input type="hidden" name="newrow.IsCustom" value="true" /></td>' +
                 '<td><div class="fee-input"><span>₱</span><input type="number" name="newrow.Fee" value="0" min="0" step="0.01" /></div></td>' +
                 '<td><label class="checkbox-container"><input type="checkbox" name="newrow.RequiresResidency" value="true" /><span>Required</span></label></td>' +
                 '<td><select name="newrow.Status" class="status-select" onchange="paintStatusSelect(this)"><option value="Active" selected>Active</option><option value="Inactive">Inactive</option></select></td>' +
                 '<td><span class="template-status is-missing">Default</span>' +
-                '<button type="button" class="icon-btn btn-template-cert needs-attention" title="Paste or upload the template" onclick="openTemplateModal(this)"><i class="bi bi-file-earmark-richtext"></i></button></td>' +
-                '<td><textarea class="format-store" name="newrow.Format" style="display:none"></textarea><button type="button" class="icon-btn btn-format-cert" title="Set legacy plain-text Format" onclick="openFormatModal(this)"><i class="bi bi-file-earmark-text"></i></button></td>' +
-                '<td><button type="button" class="btn-remove-cert" title="Remove" onclick="removeCertificateRow(this)"><i class="bi bi-trash"></i></button></td>';
+                '<span class="icon-btn btn-template-cert needs-attention" title="Save the row first, then open its template"><i class="bi bi-file-earmark-richtext"></i></span></td>' +
+                '<td><button type="button" class="btn-remove-cert" title="Remove" onclick="removeCertificateRow(this)"><i class="bi bi-trash"></i></button>' +
+                '<input type="hidden" class="format-store" name="newrow.Format" value="" /></td>';
             tbody.appendChild(row);
             updateRowIndices();
             paintStatusSelect(row.querySelector('.status-select'));
@@ -614,14 +1023,17 @@
             row.innerHTML =
                 '<td><span class="row-index"></span>' +
                 '<input type="hidden" name="newrow.Id" value="0" /></td>' +
-                '<td><input type="text" name="newrow.Type" class="cert-type-input cert-type-value" value="' + escapeHtml(type) + '" /></td>' +
+                '<td><input type="text" name="newrow.Type" class="cert-type-input cert-type-value cert-name-input" value="' + escapeHtml(type) + '" data-cert-id="0" data-original="' + escapeHtml(type) + '" onkeydown="certNameInputKey(event, this)" />' +
+                '<input type="hidden" name="newrow.Format" value="" />' +
+                '<input type="hidden" name="newrow.Template" value="" />' +
+                '<input type="hidden" name="newrow.IsCustom" value="true" /></td>' +
                 '<td><div class="fee-input"><span>₱</span><input type="number" name="newrow.Fee" value="' + escapeHtml(fee) + '" min="0" step="0.01" /></div></td>' +
                 '<td><label class="checkbox-container"><input type="checkbox" name="newrow.RequiresResidency" value="true"' + (required ? ' checked' : '') + ' /><span>Required</span></label></td>' +
                 '<td><select name="newrow.Status" class="status-select" onchange="paintStatusSelect(this)"><option value="Active" selected>Active</option><option value="Inactive">Inactive</option></select></td>' +
                 '<td><span class="template-status is-missing">Default</span>' +
-                '<button type="button" class="icon-btn btn-template-cert needs-attention" title="Paste or upload the template" onclick="openTemplateModal(this)"><i class="bi bi-file-earmark-richtext"></i></button></td>' +
-                '<td><textarea class="format-store" name="newrow.Format" style="display:none"></textarea><button type="button" class="icon-btn btn-format-cert" title="Set legacy plain-text Format" onclick="openFormatModal(this)"><i class="bi bi-file-earmark-text"></i></button></td>' +
-                '<td><button type="button" class="btn-remove-cert" title="Remove" onclick="removeCertificateRow(this)"><i class="bi bi-trash"></i></button></td>';
+                '<span class="icon-btn btn-template-cert needs-attention" title="Save the row first, then open its template"><i class="bi bi-file-earmark-richtext"></i></span></td>' +
+                '<td><button type="button" class="btn-remove-cert" title="Remove" onclick="removeCertificateRow(this)"><i class="bi bi-trash"></i></button>' +
+                '<input type="hidden" class="format-store" name="newrow.Format" value="" /></td>';
             tbody.appendChild(row);
             updateRowIndices();
             paintStatusSelect(row.querySelector('.status-select'));
@@ -649,8 +1061,15 @@
         // name containing quotes or markup cannot break out into the handler.
         function openTemplateModal(btn) {
             var row = btn.closest('tr');
-            var typeEl = row ? row.querySelector('.cert-type-value') : null;
-            var name = typeEl ? (typeEl.value || '').trim() : '';
+            // The Certificate Type cell is text-first now: prefer the pencil-edit
+            // input (covers text mode via its value and edit mode), then the
+            // plain-text label, so renames always resolve the current name.
+            var typeEl = row ? row.querySelector('.cert-name-input') : null;
+            var labelEl = row ? row.querySelector('[data-cert-name-text]') : null;
+            var name = typeEl ? (typeEl.value || '').trim()
+                : (labelEl ? (labelEl.textContent || '').trim() : '');
+            var idInput = row ? row.querySelector('input[name$=".Id"]') : null;
+            var certId = idInput ? (idInput.value || '0') : '0';
 
             if (!name) {
                 if (typeof showToast === 'function') {
@@ -661,13 +1080,13 @@
             }
 
             var nameInput = document.getElementById('templateModalName');
+            var idHidden = document.getElementById('templateModalId');
             var typeLabel = document.getElementById('templateModalType');
-            var textEl = document.getElementById('templateModalText');
             var fileEl = document.getElementById('templateModalFile');
 
             if (nameInput) nameInput.value = name;
+            if (idHidden) idHidden.value = certId;
             if (typeLabel) typeLabel.textContent = name;
-            if (textEl) textEl.value = '';
             if (fileEl) fileEl.value = '';
 
             // Tell the administrator what happens if they save nothing, so a blank
@@ -686,6 +1105,21 @@
             } else {
                 modalEl.style.display = 'block';
             }
+        }
+
+        // Footer launcher for the Template quick modal: routes to the official
+        // Template Editor page for the row's certificate (id + type), so layout
+        // editing happens in one full-page editor instead of the paste box.
+        function openOfficialEditor() {
+            var idHidden = document.getElementById('templateModalId');
+            var nameInput = document.getElementById('templateModalName');
+            var certId = idHidden ? (idHidden.value || '0') : '0';
+            var type = nameInput ? (nameInput.value || '').trim() : '';
+            var url = '/Home/TemplateEditor?id=' + encodeURIComponent(certId);
+            if (type) {
+                url += '&type=' + encodeURIComponent(type);
+            }
+            window.location.href = url;
         }
 
         var formatTarget = null;
@@ -762,6 +1196,20 @@
         // stays reachable from the modal footer.
         function openTemplateEditorModal() {
             var modalEl = document.getElementById('templateEditorModal');
+            if (!modalEl) return;
+
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                new bootstrap.Modal(modalEl).show();
+            } else {
+                modalEl.classList.add('show');
+                modalEl.style.display = 'block';
+            }
+        }
+
+        // Opens the Online Payment Methods modal, where the admin uploads the GCash
+        // QR image and edits the account name / mobile number residents pay to.
+        function openPaymentMethodModal() {
+            var modalEl = document.getElementById('paymentMethodModal');
             if (!modalEl) return;
 
             if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
@@ -970,5 +1418,37 @@
                 });
             }
         });
+
+        // ------------------------------------------------ Admin Appearance (dark mode)
+        // The switch persists the choice under the admin-only "admin_theme" localStorage
+        // key - never the shared legacy key and never the resident portal's
+        // "resident_theme" - so the two portals stay completely independent. It posts
+        // nothing to the server.
+        (function () {
+            var ADMIN_THEME_KEY = 'admin_theme';
+            var root = document.documentElement;
+            var toggle = document.getElementById('adminDarkModeSwitch');
+            if (!toggle) { return; }
+
+            function isCurrentlyDark() {
+                var attr = root.getAttribute('data-bs-theme');
+                if (attr === 'dark') { return true; }
+                if (attr === 'light') { return false; }
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) { return true; }
+                return toggle.checked;
+            }
+
+            // Reflect the theme the head script in _Layout already applied.
+            toggle.checked = isCurrentlyDark();
+
+            toggle.addEventListener('change', function () {
+                var theme = toggle.checked ? 'dark' : 'light';
+                root.setAttribute('data-bs-theme', theme);
+
+                try {
+                    if (window.localStorage) { window.localStorage.setItem(ADMIN_THEME_KEY, theme); }
+                } catch (e) { /* storage blocked: the choice simply will not persist */ }
+            });
+        })();
     </script>
 }

@@ -83,7 +83,7 @@
                             <td>@item.Purpose</td>
                             <td>@item.Issued</td>
                             <td>
-                                <span class="status-pill @(item.Status == "Pending" ? "status-pending" : item.Status == "Printed" ? "status-complete" : "status-ready")">
+                                <span class="status-pill @(item.Status == "Printed" ? "status-complete" : item.Status == "Digital Copy Sent" || item.Status == "Digital Sent" ? "status-processing" : item.Status == "Ready" ? "status-pending" : "status-pending")">
                                     @item.Status
                                 </span>
                             </td>
@@ -96,14 +96,13 @@
                                             data-amount="@item.AmountPaid">
                                         <i class="bi bi-eye"></i>
                                     </button>
-                                    <button type="button" class="icon-btn cert-edit" title="Edit" aria-label="Edit certificate" data-action="edit"
-                                            data-id="@item.Id" data-title="@item.Title" data-resident="@item.Resident"
-                                            data-age="@item.ResidentAge" data-purok="@item.Purok" data-address="@item.Address"
-                                            data-purpose="@item.Purpose" data-issued="@item.IssuedDateDisplay"
-                                            data-issuedate="@(item.IssueDate?.ToString("yyyy-MM-dd") ?? string.Empty)" data-ornumber="@item.OrNumber"
-                                            data-amount="@item.AmountPaid">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
+                                    @if (item.ClaimFormat == "Digital Soft Copy")
+                                    {
+                                        <button type="button" class="btn btn-sm btn-light-success" title="Send digital copy" aria-label="Send digital copy to resident" data-action="send-digital-copy"
+                                                data-id="@item.Id" data-request-id="@item.RequestId" data-title="@item.Title" data-resident="@item.Resident">
+                                            <i class="bi bi-send-check-fill"></i>
+                                        </button>
+                                    }
                                     <button type="button" class="icon-btn cert-print" title="Print" aria-label="Print certificate" data-action="print"
                                             data-id="@item.Id" data-title="@item.Title" data-resident="@item.Resident"
                                             data-age="@item.ResidentAge" data-purok="@item.Purok" data-address="@item.Address"
@@ -139,7 +138,7 @@
 </datalist>
 
 <div id="issueModal" class="modal fade" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Issue Walk-in Certificate</h5>
@@ -147,6 +146,7 @@
             </div>
             <form asp-action="CreateCertificate" method="post" id="issueCertificateForm">
                 @Html.AntiForgeryToken()
+                <input type="hidden" name="requestId" value="@Model.PrefillRequestId" />
                 <div class="modal-body d-flex flex-column gap-3">
                     <label class="form-label">Resident Name
                         <input type="text" name="resident" id="formResident" class="form-control"
@@ -187,11 +187,6 @@
                             }
                         </select>
                     </label>
-
-                    <div id="formatPreviewWrap" class="format-preview-wrap" style="display:none">
-                        <span class="form-label">Format Template</span>
-                        <pre id="formFormatPreview" style="white-space:pre-wrap;background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;padding:12px;max-height:220px;overflow:auto;margin:6px 0 0;"></pre>
-                    </div>
 
                     <label class="form-label">Purpose
                         <input type="text" name="purpose" id="formPurpose" class="form-control" required />
@@ -307,10 +302,47 @@
     </div>
 </div>
 
+@* Send Digital Copy: delivers the digital certificate to the resident who asked for a
+   "Digital Soft Copy" claim format. The PDF is uploaded here and lands in the
+   resident's portal as a Download PDF button on their request. *@
+<div id="sendDigitalModal" class="modal fade" tabindex="-1" aria-hidden="true" aria-labelledby="sendDigitalModalLabel">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sendDigitalModalLabel"><i class="bi bi-send-check-fill me-1"></i> Send Digital Copy</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-action="SendDigitalCertificate" method="post" enctype="multipart/form-data" id="sendDigitalForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="certificateId" id="sendDigitalCertificateId" />
+                <input type="hidden" name="requestId" id="sendDigitalRequestId" />
+                <div class="modal-body d-flex flex-column gap-3">
+                    <p class="form-text mb-0" id="sendDigitalTarget"></p>
+
+                    <label class="form-label">Certificate PDF
+                        <input type="file" name="pdfFile" id="sendDigitalPdf" class="form-control"
+                               accept=".pdf,application/pdf" required />
+                    </label>
+                    <p class="form-text mb-0">Maximum 10 MB. The resident downloads it from My Requests and prints it on their own.</p>
+
+                    <label class="form-label">Delivery note for the resident
+                        <textarea name="deliveryNote" id="sendDigitalNote" class="form-control" rows="3" maxlength="300"
+                                  placeholder="Optional message shown as the barangay's reply..."></textarea>
+                    </label>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-send-check-fill me-1"></i> Send Digital Copy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <form id="certActionToken" method="post" style="display:none;">@Html.AntiForgeryToken()</form>
     <script src="~/js/certificate-print.js" asp-append-version="true"></script>
     <script id="certResidentsJson" type="application/json">@Html.Raw(Json.Serialize(Model.Residents.Select(r => new { name = r.Name, age = (r.AgeSex ?? "").Split('/')[0].Trim(), purok = r.Purok })))</script>
-    <script id="certPrefillJson" type="application/json">@Html.Raw(Json.Serialize(new { open = Model.OpenIssueModal, resident = Model.PrefillResident, title = Model.PrefillTitle, purpose = Model.PrefillPurpose }))</script>
+    <script id="certPrefillJson" type="application/json">@Html.Raw(Json.Serialize(new { open = Model.OpenIssueModal, resident = Model.PrefillResident, title = Model.PrefillTitle, purpose = Model.PrefillPurpose, age = Model.PrefillAge, purok = Model.PrefillPurok }))</script>
     <script src="~/js/certificates.js" asp-append-version="true"></script>
 }

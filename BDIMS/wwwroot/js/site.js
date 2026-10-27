@@ -4,7 +4,7 @@
 // Write your JavaScript code.
 // Notifications helper: fetch list and show in modal
 function openNotifications() {
-    fetch('/Home/GetNotifications')
+    fetch(notificationEndpoint('GetNotifications'))
         .then(function (r) { return r.json(); })
         .then(function (data) {
             if (!data || data.length === 0) {
@@ -14,7 +14,7 @@ function openNotifications() {
 
             var html = '<div class="list-group">';
             data.forEach(function (n) {
-                html += '<a class="list-group-item list-group-item-action" href="/Home/Announcements">' +
+                html += '<a class="list-group-item list-group-item-action" href="/Resident/Announcements">' +
                     '<div class="d-flex w-100 justify-content-between"><h6 class="mb-1">' + escapeHtml(n.title) + '</h6><small>' + escapeHtml(n.date) + '</small></div>' +
                     '<p class="mb-1 text-truncate">' + escapeHtml(n.purpose) + '</p>' +
                     '</a>';
@@ -27,6 +27,17 @@ function openNotifications() {
             openModal('Notifications', '<p class="text-danger">Unable to load notifications.</p>');
             console.error(err);
         });
+}
+
+// The controller the bell talks to: "/Notification" on admin pages, "/Resident" on
+// resident pages, "/Home" as the legacy fallback.
+function notificationPrefix() {
+    var dropdown = document.getElementById('notifDropdown');
+    return dropdown && dropdown.dataset.endpointPrefix ? dropdown.dataset.endpointPrefix : '/Home';
+}
+
+function notificationEndpoint(action) {
+    return notificationPrefix() + '/' + action;
 }
 
 // ------- Shared notification dropdown logic -------
@@ -71,13 +82,73 @@ function updateNotifBadge(count) {
     });
 }
 
+// Sidebar document-request badge (the Documents link only). Certificate badges are
+// not driven by document requests, so only #documentsSidebarBadge is updated here.
+function updateSidebarBadges(count) {
+    var remaining = (typeof count === 'number' && count > 0) ? count : 0;
+
+    document.querySelectorAll('#documentsSidebarBadge .sidebar-badge').forEach(function (el) {
+        if (remaining <= 0) {
+            el.style.display = 'none';
+            el.textContent = '0';
+        } else {
+            el.style.display = '';
+            el.textContent = (remaining > 99) ? '99+' : String(remaining);
+        }
+    });
+}
+
+// Removes the inline "NEW" badges from the Documents table - every row when no row is
+// given, or just the one that was opened.
+function clearInlineNewBadges(row) {
+    var scope = row || document;
+    scope.querySelectorAll('.doc-new-badge').forEach(function (el) { el.remove(); });
+}
+
+// The two bell endpoints answer in two shapes: the admin Home controller returns
+// an array, the resident controller returns { unreadCount, notifications }. These
+// two helpers let every caller read either one without branching everywhere.
+function notificationListFrom(data) {
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.notifications)) return data.notifications;
+    return [];
+}
+
+function notificationCountFrom(data, list) {
+    if (data && !Array.isArray(data)) {
+        // Home/GetNotifications returns totalBellCount; Resident/GetNotifications
+        // returns unreadCount. Either is more authoritative than counting the list.
+        if (typeof data.totalBellCount === 'number') return data.totalBellCount;
+        if (typeof data.unreadCount === 'number') return data.unreadCount;
+    }
+    return (list || []).filter(function (n) { return !n.isRead; }).length;
+}
+
 function fetchUnreadCount() {
-    fetch('/Home/GetUnreadCount')
+    fetch(notificationEndpoint('GetNotifications'))
         .then(function (r) { return r.json(); })
         .then(function (data) {
-            updateNotifBadge(data.count || 0);
+            var list = notificationListFrom(data);
+            updateNotifBadge(notificationCountFrom(data, list));
         })
         .catch(function (err) { console.error('Unread count fetch failed', err); });
+}
+
+// Loads the latest notifications into the open dropdown and syncs the badge.
+function fetchNotifications() {
+    fetch(notificationEndpoint('GetNotifications'))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            var list = notificationListFrom(data);
+            renderNotifDropdown(list);
+            // Server count wins: the list is capped, the badge is the full total.
+            updateNotifBadge(notificationCountFrom(data, list));
+        })
+        .catch(function (err) {
+            console.error('Failed to load notifications', err);
+            var dropdown = document.getElementById('notifDropdown');
+            if (dropdown) dropdown.innerHTML = '<div class="notif-empty">Unable to load notifications.</div>';
+        });
 }
 
 function toggleNotifDropdown(e) {
@@ -91,10 +162,12 @@ function toggleNotifDropdown(e) {
     }
 
     // load notifications and show
-    fetch('/Home/GetNotifications')
+    fetch(notificationEndpoint('GetNotifications'))
         .then(function (r) { return r.json(); })
-        .then(function (items) {
-            renderNotifDropdown(items || []);
+        .then(function (data) {
+            var list = notificationListFrom(data);
+            renderNotifDropdown(list);
+            updateNotifBadge(notificationCountFrom(data, list));
             dropdown.style.display = 'block';
             dropdown.setAttribute('aria-hidden', 'false');
         })
@@ -123,7 +196,9 @@ function renderNotifDropdown(items) {
     var dropdown = document.getElementById('notifDropdown');
     if (!dropdown) return;
 
-    var html = '<div class="header"><strong>Notifications</strong><button class="btn btn-link" onclick="markAllRead(event)">Mark all as read</button></div>';
+    var html = '<div class="header"><strong>Notifications</strong>' +
+        '<button type="button" class="btn btn-link btn-sm text-primary fw-semibold text-decoration-none p-0" onclick="markAllAsReadPermanent(event)">' +
+        '<i class="bi bi-check2-all me-1"></i>Mark all as read</button></div>';
     if (!items || items.length === 0) {
         html += '<div class="notif-empty">No notifications at this time.</div>';
         dropdown.innerHTML = html;
@@ -134,9 +209,19 @@ function renderNotifDropdown(items) {
     html += '<div class="items">';
     items.forEach(function (n) {
         var cls = n.isRead ? 'notif-item read' : 'notif-item unread';
+        var type = String(n.type || '').toLowerCase();
+        // Green document for approved/ready, red warning for rejected, blue
+        // megaphone for announcements; anything else falls back to the document.
+        var icon = type.indexOf('announcement') >= 0
+            ? '<i class="bi bi-megaphone-fill text-primary"></i>'
+            : type.indexOf('reject') >= 0
+                ? '<i class="bi bi-exclamation-triangle-fill text-danger"></i>'
+                : '<i class="bi bi-file-earmark-check-fill text-success"></i>';
+        var targetUrl = n.targetUrl || n.relatedUrl || '';
         html += '<div class="' + cls + '" data-id="' + escapeHtml(n.id) + '"' +
             ' data-type="' + escapeHtml(n.type || '') + '"' +
-            ' data-related-url="' + escapeHtml(n.relatedUrl || '') + '">';
+            ' data-related-url="' + escapeHtml(targetUrl) + '">';
+        html += '<div class="notif-icon" aria-hidden="true">' + icon + '</div>';
         html += '<div class="notif-item-content">';
         html += '<div class="title">' + escapeHtml(n.title) + '</div>';
         html += '<div class="meta">' + escapeHtml(n.message || '') + '</div>';
@@ -147,11 +232,18 @@ function renderNotifDropdown(items) {
     });
     html += '</div>';
 
+    // Footer points each portal at its own inbox: residents at My Requests,
+    // admins at the announcement manager they act on. Rendered as a full-width
+    // outline button so it reads as the dropdown's primary call to action.
+    var dropdownEl = document.getElementById('notifDropdown');
+    var isResident = dropdownEl && dropdownEl.dataset.endpointPrefix === '/Resident';
+    html += isResident
+        ? '<div class="notif-footer p-2 border-top"><a class="btn btn-sm btn-outline-primary w-100" href="/Resident/Requests">View my requests &rarr;</a></div>'
+        : '<div class="notif-footer p-2 border-top"><a class="btn btn-sm btn-outline-primary w-100" href="/Home/Announcements">View all announcements &rarr;</a></div>';
+
     dropdown.innerHTML = html;
 
-    // update badge count
-    var unread = items.filter(function (i) { return !i.isRead; }).length;
-    updateNotifBadge(unread);
+    // Badge is synced by the caller, which has the authoritative unread total.
 }
 
 function handleNotifClick(ev, id, type, relatedUrl) {
@@ -182,7 +274,8 @@ function handleNotifClick(ev, id, type, relatedUrl) {
         itemEl.classList.remove('unread');
         itemEl.classList.add('read');
 
-        var current = parseInt(document.querySelector('.notif-badge').textContent, 10);
+        var badgeEl = document.querySelector('.notif-badge');
+        var current = badgeEl ? parseInt(badgeEl.textContent, 10) : NaN;
         if (!isNaN(current) && current > 0) {
             updateNotifBadge(current - 1);
         } else {
@@ -190,8 +283,10 @@ function handleNotifClick(ev, id, type, relatedUrl) {
         }
     }
 
-    // Mark as read via POST
-    postJson('/Home/MarkAsRead', 'id=' + encodeURIComponent(id))
+    // Mark as read via POST /<prefix>/MarkAsRead/{id}. Using the id as a route
+    // segment (rather than a form field) matches the NotificationController API and
+    // still resolves against the resident and home controllers' {id?} routes.
+    postJson(notificationEndpoint('MarkAsRead') + '/' + encodeURIComponent(id), '')
     .then(function (r) {
         if (r.status !== 200) throw new Error('MarkAsRead failed with status ' + r.status);
         return r.json();
@@ -201,13 +296,22 @@ function handleNotifClick(ev, id, type, relatedUrl) {
         updateNotifBadge(data && typeof data.unread === 'number' ? data.unread : 0);
 
         // Refresh the list so the read state on screen matches the database.
-        return fetch('/Home/GetNotifications')
+        return fetch(notificationEndpoint('GetNotifications'))
             .then(function (r) { return r.json(); })
-            .then(function (items) { renderNotifDropdown(items || []); });
+            .then(function (data) {
+                var list = notificationListFrom(data);
+                renderNotifDropdown(list);
+                updateNotifBadge(notificationCountFrom(data, list));
+            });
     })
     .then(function () {
-        // show full announcement details
-        openNotificationDetails(id);
+        var item = document.querySelector('.notif-item[data-id="' + CSS.escape(String(id)) + '"]');
+        var url = item ? item.getAttribute('data-related-url') : '';
+        if (url) {
+            window.location.href = url;
+        } else {
+            openNotificationDetails(id);
+        }
     })
     .catch(function (err) {
         console.error(err);
@@ -217,7 +321,7 @@ function handleNotifClick(ev, id, type, relatedUrl) {
 }
 
 function openNotificationDetails(id) {
-    fetch('/Home/GetNotification?id=' + encodeURIComponent(id))
+    fetch(notificationEndpoint('GetNotification') + '?id=' + encodeURIComponent(id))
         .then(function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
@@ -281,47 +385,74 @@ function renderNotificationDetails(d) {
     else { modal = new bootstrap.Modal(modalEl); modal.show(); }
 }
 
-function markAllRead(e) {
+// Server-first "Mark all as read". The badge and rows are only touched once the
+// POST confirms the database commit; updating them optimistically beforehand is what
+// used to make the red counter blink off and then reappear when the list was re-synced.
+function markAllAsReadPermanent(e) {
     if (e) e.stopPropagation();
 
-    // Optimistic update: the badge and every unread row are switched to their read
-    // appearance straight away, so the UI reacts on the same click instead of waiting
-    // for the round-trip. renderNotifDropdown() re-applies this from the server
-    // response, which keeps it correct if the request fails.
-    var dropdown = document.getElementById('notifDropdown');
-    if (dropdown) {
-        dropdown.querySelectorAll('.notif-item.unread').forEach(function (item) {
-            item.classList.remove('unread');
-            item.classList.add('read');
-        });
-    }
-    updateNotifBadge(0);
+    // The admin bell posts to /Notification/MarkAllAsRead (NotificationController);
+    // the resident bell resolves to /Resident/MarkAllRead through the same prefix.
+    var prefix = notificationPrefix();
+    var endpoint = (prefix === '/Notification') ? '/Notification/MarkAllAsRead' : prefix + '/MarkAllRead';
 
-    postJson('/Home/MarkAllRead', '')
+    postJson(endpoint, '')
     .then(function (r) {
         if (r.status !== 200) throw new Error('Mark all read failed with status ' + r.status);
         return r.json();
     })
     .then(function (data) {
-        // The server count is authoritative. Falling back to 0 when the field is absent
-        // keeps an older build from leaving a stale number on screen.
+        // Commit confirmed - only now update the DOM. Every unread row flips to its
+        // read appearance and the badge is set from the server's authoritative count.
+        var dropdown = document.getElementById('notifDropdown');
+        if (dropdown) {
+            dropdown.querySelectorAll('.notif-item.unread').forEach(function (item) {
+                item.classList.remove('unread');
+                item.classList.add('read');
+            });
+        }
         updateNotifBadge(data && typeof data.unread === 'number' ? data.unread : 0);
 
-        return fetch('/Home/GetNotifications')
+        // A single "Mark all as read" also acknowledges the document requests, so the
+        // sidebar counters and the inline NEW badges are cleared here rather than
+        // waiting for the next page load.
+        updateSidebarBadges(0);
+        clearInlineNewBadges();
+
+        // Re-read the list so its read state matches the database.
+        return fetch(notificationEndpoint('GetNotifications'))
             .then(function (r) { return r.json(); })
-            .then(function (items) { renderNotifDropdown(items || []); });
+            .then(function (resp) {
+                var list = notificationListFrom(resp);
+                renderNotifDropdown(list);
+                updateNotifBadge(notificationCountFrom(resp, list));
+            });
     })
     .catch(function (err) {
         console.error('Mark all read failed', err);
-        // Roll back to the server truth so a failed save cannot leave the badge hidden
-        // while the notifications are still unread.
+        // No commit, so leave the UI as-is and resync from the server rather than
+        // hiding a badge that is still set.
         fetchUnreadCount();
     });
+}
+
+// Backwards-compatible alias: any markup still wired to markAllRead() keeps working.
+function markAllRead(e) {
+    return markAllAsReadPermanent(e);
 }
 
 // ensure unread count is fetched when page loads, and wire up notification item clicks
 document.addEventListener('DOMContentLoaded', function () {
     fetchUnreadCount();
+
+    // Resident bell: Bootstrap drives the open/close state, so the list is loaded
+    // when the dropdown is about to show. Admin pages keep using toggleNotifDropdown.
+    document.addEventListener('show.bs.dropdown', function (ev) {
+        var toggle = ev.target;
+        if (toggle && toggle.closest && toggle.closest('.notification-wrapper')) {
+            fetchNotifications();
+        }
+    });
 
     document.addEventListener('click', function (ev) {
         var viewBtn = ev.target.closest('.notif-view-btn');
@@ -451,7 +582,7 @@ document.addEventListener('DOMContentLoaded', function () {
             fetchUnreadCount();
             var dd = document.getElementById('notifDropdown');
             if (dd && dd.style.display === 'block') {
-                fetch('/Home/GetNotifications').then(function (r) { return r.json(); }).then(function (items) { renderNotifDropdown(items || []); });
+                fetch(notificationEndpoint('GetNotifications')).then(function (r) { return r.json(); }).then(function (items) { renderNotifDropdown(items || []); });
             }
 
             // reset form

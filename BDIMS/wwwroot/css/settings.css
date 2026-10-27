@@ -94,6 +94,18 @@
     cursor: pointer;
 }
 
+/* Anchors styled as buttons (e.g. direct "Open Template Editor" links). */
+a.btn-add-certificate {
+    text-decoration: none;
+}
+
+a.icon-btn {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .notification-dot {
     position: absolute;
     top: 6px;
@@ -227,6 +239,157 @@
 .cert-type-input:focus,
 .status-select:focus {
     border-color: #94a3b8;
+}
+
+/* Inline-editable certificate name in the fee table. It reads like the bold label
+   at rest and only reveals a light input border on hover/focus, so the table keeps
+   its clean look while the name stays editable in place. */
+.settings-table .cert-type-inline {
+    width: 100%;
+    min-width: 160px;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    font-weight: 600;
+    color: #0f172a;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-table .cert-type-inline:hover {
+    border-color: #e2e8f0;
+    background: #ffffff;
+}
+
+.settings-table .cert-type-inline:focus {
+    border-color: #94a3b8;
+    background: #ffffff;
+    outline: none;
+}
+
+/* Certificate name cell: plain text + small pencil icon at rest.
+   Clicking the pencil (or the name) swaps in an input with
+   checkmark-save and cancel buttons. */
+.cert-name-cell {
+    min-width: 200px;
+}
+
+.cert-name-view {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cert-name-text {
+    font-weight: 600;
+    color: #0f172a;
+    cursor: pointer;
+    word-break: break-word;
+}
+
+.cert-name-text:hover {
+    text-decoration: underline;
+}
+
+.cert-name-edit-btn {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    font-size: 13px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.cert-name-edit-btn:hover {
+    color: #0b1736;
+    background: #f1f5f9;
+}
+
+.cert-name-edit {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.cert-name-input {
+    flex: 1 1 auto;
+    min-width: 140px;
+    padding: 6px 8px;
+    border: 1px solid #94a3b8;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    background: #ffffff;
+    color: #111827;
+}
+
+.cert-name-save-btn,
+.cert-name-cancel-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+    cursor: pointer;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+}
+
+.cert-name-save-btn {
+    background: #059669;
+    color: #ffffff;
+}
+
+.cert-name-save-btn:hover {
+    background: #047857;
+}
+
+.cert-name-cancel-btn {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.cert-name-cancel-btn:hover {
+    background: #e2e8f0;
+}
+
+/* Fee cell mirrors the name cell: 2-decimal "₱ 30.00" text + pencil icon at
+   rest; number input + checkmark save when editing. */
+.cert-fee-cell {
+    min-width: 150px;
+}
+
+.cert-fee-view {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cert-fee-text {
+    font-weight: 600;
+    color: #0f172a;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.cert-fee-text:hover {
+    text-decoration: underline;
+}
+
+.cert-fee-edit {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.cert-fee-edit .fee-input {
+    width: 120px;
+}
+
+.cert-fee-input {
+    font-size: 13px;
 }
 
 .status-select {
@@ -619,6 +782,11 @@
     background: #ecfdf5;
     color: #047857;
     border: 1px solid #d1fae5;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
 }
 
     .btn-template-cert:hover {

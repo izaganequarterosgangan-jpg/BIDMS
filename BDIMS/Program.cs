@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,11 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.LoginPath = "/Account/Login";
         options.LogoutPath = "/Account/Login";
+
+        // A signed-in user who lacks the role a page requires is sent here instead of
+        // the framework default (/Account/AccessDenied by convention but with no
+        // matching action, which surfaced as a 404). AccountController implements it.
+        options.AccessDeniedPath = "/Account/AccessDenied";
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
 
@@ -35,7 +41,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         // request, which is what makes it an *idle* timeout rather than a fixed
         // lifetime. The setting is read through the provider, so a change saved in
         // Settings applies to the next request with no restart.
-        options.Events.OnValidatePrincipal = context =>
+        options.Events.OnValidatePrincipal = async context =>
         {
             var settings =
                 context.HttpContext.RequestServices
@@ -49,11 +55,66 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
                 // the session; the AJAX branch of OnRedirectToLogin turns the
                 // resulting challenge into a 401 instead of an HTML redirect.
                 context.RejectPrincipal();
-                return Task.CompletedTask;
+                return;
+            }
+
+            // Role/claim refresh: User Management's Edit Account only writes the
+            // account row, so a signed-in user's cookie would otherwise keep the
+            // old role - and the old portal - until it expired. UserSignIn
+            // re-derives the principal from that row: a role change lands on the
+            // very next request, and a deleted, blocked or deactivated account is
+            // signed out immediately instead of browsing with a stale cookie.
+            var (refreshOutcome, refreshedPrincipal) = await BDIMS.Services.UserSignIn
+                .RefreshPrincipalAsync(context.HttpContext, context.Principal);
+
+            if (refreshOutcome == BDIMS.Services.UserSignIn.PrincipalRefreshOutcome.Rejected)
+            {
+                context.RejectPrincipal();
+                return;
+            }
+
+            if (refreshOutcome == BDIMS.Services.UserSignIn.PrincipalRefreshOutcome.Refreshed
+                && refreshedPrincipal != null)
+            {
+                // ReplacePrincipal makes the authorization middleware and the
+                // layout's IsInRole checks evaluate the *new* role for this very
+                // request; ShouldRenew persists it into the sliding cookie.
+                context.ReplacePrincipal(refreshedPrincipal);
+            }
+
+            // "Sign out other devices" on the Resident Settings page records a
+            // per-account cutoff; any cookie issued before it is treated as a revoked
+            // session. The lookup is scoped to Resident accounts so administrator and
+            // staff sessions pay no extra query on every request.
+            if (context.Principal?.IsInRole("Resident") == true)
+            {
+                var userIdRaw = context.Principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                if (int.TryParse(userIdRaw, out var residentUserId))
+                {
+                    try
+                    {
+                        var db = context.HttpContext.RequestServices
+                            .GetRequiredService<ApplicationDbContext>();
+
+                        var cutoff = BDIMS.Services.ResidentSettingsStore
+                            .ReadSessionsValidFrom(db, residentUserId);
+
+                        if (cutoff.HasValue && issued < cutoff.Value)
+                        {
+                            context.RejectPrincipal();
+                            return;
+                        }
+                    }
+                    catch
+                    {
+                        // A settings read must never take a whole session down; on any
+                        // failure fall through and renew the session as normal.
+                    }
+                }
             }
 
             context.ShouldRenew = true;
-            return Task.CompletedTask;
         };
 
         // A request that is already carrying a valid cookie must never be bounced back
@@ -111,6 +172,12 @@ builder.Services.AddSingleton<BDIMS.Services.BarangayProfileProvider>();
 // cache, no direct scoped dependency, so document creation and the auth cookie can
 // read the live values on every request.
 builder.Services.AddSingleton<BDIMS.Services.SystemSettingsProvider>();
+
+// Per-account storage for the Resident Portal > Settings preferences (security,
+// notification and appearance choices). Scoped, not singleton like the two providers
+// above: it is only ever used inside a request that already has an
+// ApplicationDbContext, so it takes the context directly instead of opening its own.
+builder.Services.AddScoped<BDIMS.Services.ResidentSettingsStore>();
 
 // Register ApplicationDbContext with Pomelo MySQL Provider
 //
@@ -199,6 +266,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 app.UseRouting();
 
 // Must sit between UseRouting and UseAuthorization: it is what populates HttpContext.User

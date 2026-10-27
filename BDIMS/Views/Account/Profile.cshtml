@@ -150,7 +150,11 @@
 
                 <div class="profile-field">
                     <label asp-for="Role" class="profile-label"></label>
-                    <input asp-for="Role" class="profile-input" autocomplete="organization-title" />
+                    @* Read-only: Role is the portal-authorization column and is
+                       managed exclusively from User Management's Edit Account.
+                       SaveProfile discards the posted value as well, so the
+                       readonly attribute is UX, not the security boundary. *@
+                    <input asp-for="Role" class="profile-input" autocomplete="organization-title" readonly />
                     <span asp-validation-for="Role" class="profile-error"></span>
                 </div>
             </div>

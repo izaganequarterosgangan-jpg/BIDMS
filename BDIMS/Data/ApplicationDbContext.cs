@@ -23,6 +23,16 @@ namespace BDIMS.Data
                 .HasIndex(u => u.NormalizedEmail)
                 .IsUnique()
                 .HasDatabaseName("IX_UserAccounts_NormalizedEmail");
+
+            // Status is persisted as its enum name ("Active", "Pending", ...) rather
+            // than the underlying integer, so the value readable in queries, backups
+            // and support sessions is the same one the UI shows, and a hand-edited row
+            // cannot silently mean something different from what admins see.
+            modelBuilder.Entity<UserAccount>()
+                .Property(u => u.Status)
+                .HasConversion<string>()
+                .HasMaxLength(16)
+                .IsRequired();
         }
 
         // DbSets map your C# model classes to tables in MySQL
@@ -36,5 +46,6 @@ namespace BDIMS.Data
         public DbSet<NotificationModel> Notifications { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
         public DbSet<UserAccount> UserAccounts { get; set; }
+        public DbSet<EmergencyHotline> EmergencyHotlines { get; set; }
     }
 }
