@@ -148,7 +148,7 @@
         <!-- BARANGAY INFO TAB -->
         @if (Model.ActiveTab == "general")
         {
-            <form id="generalSettingsForm" asp-controller="Home" asp-action="SaveSettings" method="post">
+            <form id="generalSettingsForm" asp-controller="Home" asp-action="SaveSettings" method="post" enctype="multipart/form-data">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="ActiveTab" value="general" />
 
@@ -194,6 +194,14 @@
                             <label>Signatory Title</label>
                             <input type="text" name="SignatoryRole" value="@Model.SignatoryRole" placeholder="Signatory Title" />
                         </div>
+                    </div>
+
+                    <!-- Barangay Logo upload. Stored under wwwroot/uploads/barangay_logo.png
+                        and persisted as configured via SaveSettings. Hidden name is not
+                        used because the file travels in multipart form data. -->
+                    <div class="form-group">
+                        <label>Barangay Logo</label>
+                        <input type="file" id="barangayLogo" name="LogoFile" accept=".png,.jpg,.jpeg,.webp" />
                     </div>
 
                     <!-- Additive action row. The form-grid above is untouched, so the

@@ -17,4 +17,10 @@ public class BarangayProfileForm
     public string? OfficeHours { get; set; }
     public string? SignatoryName { get; set; }
     public string? SignatoryRole { get; set; }
+
+    /// <summary>
+    /// File name of the uploaded barangay logo (stored under wwwroot/uploads/).
+    /// Null when no custom logo has been configured.
+    /// </summary>
+    public string? LogoFileName { get; set; }
 }

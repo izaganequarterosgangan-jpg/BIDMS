@@ -18,4 +18,11 @@ public class BarangayOptions
     public string OfficeHours { get; set; } = "8:00 AM - 5:00 PM (Mon-Fri)";
     public string SignatoryName { get; set; } = "Hon. Celes P. Pondavilla";
     public string SignatoryRole { get; set; } = "Punong Barangay";
+
+    /// <summary>
+    /// File name of the uploaded barangay logo stored under wwwroot/uploads/.
+    /// Null when no custom logo has been configured, in which case the default
+    /// /images/Logo.png is used as a fallback.
+    /// </summary>
+    public string? LogoFileName { get; set; }
 }

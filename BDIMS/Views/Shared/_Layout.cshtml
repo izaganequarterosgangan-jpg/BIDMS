@@ -595,7 +595,14 @@
             <div>
                 <div class="sidebar-logo-container">
                     <div class="logo-badge">
-                        <i class="bi bi-shield-check text-warning fs-4"></i>
+                        @if (!string.IsNullOrWhiteSpace(BarangayProfile.LogoUrl))
+                        {
+                            <img src="@BarangayProfile.LogoUrl" asp-append-version="true" alt="Barangay Logo" />
+                        }
+                        else
+                        {
+                            <i class="bi bi-shield-check text-warning fs-4"></i>
+                        }
                     </div>
                     <div>
                         <h1 class="brand-title">BIDMS</h1>

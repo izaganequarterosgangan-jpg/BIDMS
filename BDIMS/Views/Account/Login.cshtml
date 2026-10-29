@@ -1,5 +1,6 @@
 ﻿@model BDIMS.Models.LoginViewModel
 
+@inject BDIMS.Services.BarangayProfileProvider BarangayProfile
 @{
     Layout = null; // Disables default navigation layout for a full-page login
     ViewData["Title"] = "Login - BIDMS";
@@ -60,7 +61,7 @@
         <!-- Right Login Form Section -->
         <div class="right-section">
             <div class="form-container">
-                <img src="~/images/Logo.png" alt="BIDMS Logo" class="logo-image" />
+                <img src="@BarangayProfile.LogoUrl" asp-append-version="true" alt="Barangay Logo" class="logo-image" />
                 <p class="welcome-sub">
                     Sign in to your official BIDMS account to continue.
                 </p>
@@ -137,17 +138,6 @@
                     Don't have an account?
                     <a href="#" class="register-link" id="openRegisterLink">Register here</a>
                 </p>
-
-                <div class="divider">
-                    <span class="divider-line"></span>
-                    <span class="divider-text">or</span>
-                    <span class="divider-line"></span>
-                </div>
-
-                <button class="qr-btn" type="button">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" style="margin-right: 8px;"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
-                    Sign in with QR Code / PIN
-                </button>
 
                 <p class="legal-text">
                     Access restricted to authorized barangay personnel only.<br />

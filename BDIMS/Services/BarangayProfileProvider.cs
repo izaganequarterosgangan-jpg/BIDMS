@@ -1,4 +1,5 @@
 using BDIMS.Models;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -39,6 +40,7 @@ namespace BDIMS.Services
         private const string KeyOfficeHours = KeyPrefix + nameof(BarangayOptions.OfficeHours);
         private const string KeySignatoryName = KeyPrefix + nameof(BarangayOptions.SignatoryName);
         private const string KeySignatoryRole = KeyPrefix + nameof(BarangayOptions.SignatoryRole);
+        private const string KeyLogoFileName = KeyPrefix + nameof(BarangayOptions.LogoFileName);
 
         // Upper bound keeps an accidentally pasted essay from pushing a printed
         // letterhead onto a second page. Generous enough for real values (office
@@ -48,6 +50,7 @@ namespace BDIMS.Services
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<BarangayProfileProvider> _logger;
         private readonly IOptions<BarangayOptions> _configured;
+        private readonly IWebHostEnvironment _env;
         private readonly object _gate = new object();
 
         private BarangayOptions? _cache;
@@ -58,10 +61,12 @@ namespace BDIMS.Services
         public BarangayProfileProvider(
             IServiceScopeFactory scopeFactory,
             IOptions<BarangayOptions> configured,
+            IWebHostEnvironment env,
             ILogger<BarangayProfileProvider> logger)
         {
             _scopeFactory = scopeFactory;
             _configured = configured;
+            _env = env;
             _logger = logger;
         }
 
@@ -79,6 +84,26 @@ namespace BDIMS.Services
                 {
                     return _cache ??= Load();
                 }
+            }
+        }
+
+        /// <summary>
+        /// URL of the barangay logo: the configured custom logo under
+        /// wwwroot/uploads/logos/barangay_logo.png when one has been uploaded,
+        /// otherwise the default /images/Logo.png. The asp-append-version tag
+        /// helper on consuming img tags will add a version query string so browsers
+        /// immediately reflect a new logo upload without caching the old one.
+        /// </summary>
+        public string LogoUrl
+        {
+            get
+            {
+                var fileName = Current.LogoFileName;
+                if (!string.IsNullOrWhiteSpace(fileName))
+                {
+                    return "/uploads/logos/barangay_logo.png";
+                }
+                return "/images/Logo.png";
             }
         }
 
@@ -103,7 +128,8 @@ namespace BDIMS.Services
                 ContactPhone = Clean(form.ContactPhone),
                 OfficeHours = Clean(form.OfficeHours),
                 SignatoryName = Clean(form.SignatoryName),
-                SignatoryRole = Clean(form.SignatoryRole)
+                SignatoryRole = Clean(form.SignatoryRole),
+                LogoFileName = Clean(form.LogoFileName)
             };
 
             if (candidate.BarangayName.Length == 0)
@@ -133,6 +159,7 @@ namespace BDIMS.Services
                     WriteSetting(db, KeyOfficeHours, candidate.OfficeHours);
                     WriteSetting(db, KeySignatoryName, candidate.SignatoryName);
                     WriteSetting(db, KeySignatoryRole, candidate.SignatoryRole);
+                    WriteSetting(db, KeyLogoFileName, candidate.LogoFileName ?? string.Empty);
 
                     db.SaveChanges();
 
@@ -202,7 +229,8 @@ namespace BDIMS.Services
                 ContactPhone = Pick(stored, KeyContactPhone, configured.ContactPhone),
                 OfficeHours = Pick(stored, KeyOfficeHours, configured.OfficeHours),
                 SignatoryName = Pick(stored, KeySignatoryName, configured.SignatoryName),
-                SignatoryRole = Pick(stored, KeySignatoryRole, configured.SignatoryRole)
+                SignatoryRole = Pick(stored, KeySignatoryRole, configured.SignatoryRole),
+                LogoFileName = Pick(stored, KeyLogoFileName, configured.LogoFileName)
             };
         }
 

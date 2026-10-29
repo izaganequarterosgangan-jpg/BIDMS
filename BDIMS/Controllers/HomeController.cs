@@ -844,6 +844,19 @@ namespace BDIMS.Controllers
         [HttpGet]
         public IActionResult Documents(string searchQuery = "")
         {
+            // Mark all unread document requests as read as soon as an admin or
+            // secretary opens the Documents page, so the red notification badge on
+            // the sidebar disappears. Idempotent: already-read rows are untouched.
+            var unreadRequests = _db.DocumentRequests.Where(d => !d.IsRead).ToList();
+            foreach (var r in unreadRequests)
+            {
+                r.IsRead = true;
+            }
+            if (unreadRequests.Count > 0)
+            {
+                _db.SaveChanges();
+            }
+
             // Use shared in-memory list so changes persist across requests
             var filtered = documentRequests.AsEnumerable();
 
@@ -4319,6 +4332,7 @@ private static readonly string[] BlotterResolvedStatuses =
                 OfficeHours = _barangayProfile.Current.OfficeHours,
                 SignatoryName = CurrentSignatoryName,
                 SignatoryRole = CurrentSignatoryRole,
+                LogoFileName = _barangayProfile.Current.LogoFileName,
 
                 Certificates = certificateRulesList.ToList(),
                 CertificateTemplates = certificateTemplateList
@@ -4458,6 +4472,33 @@ private static readonly string[] BlotterResolvedStatuses =
             // silently discarding the values it just received.
             if (model.ActiveTab == "general")
             {
+                // A new logo upload can carry an <input type="file"> inside the form, so
+                // check whether one was supplied before deciding how to persist the
+                // profile. The file is validated and saved to wwwroot/uploads/barangay_logo.png
+                // before the profile is written, and only recorded as configured when it is.
+                var hasNewLogo = model.LogoFile is { Length: > 0 };
+                var allowedTypes = new[] { "image/png", "image/jpeg", "image/webp" };
+                var allowedExts = new[] { ".png", ".jpg", ".jpeg", ".webp" };
+
+                if (hasNewLogo)
+                {
+                    if (!allowedTypes.Contains(model.LogoFile!.ContentType) ||
+                        !allowedExts.Contains(Path.GetExtension(model.LogoFile!.FileName).ToLowerInvariant()))
+                    {
+                        TempData["ErrorMessage"] = "Please upload a PNG, JPG or WEBP image for the barangay logo.";
+                        return RedirectToAction("Settings", new { tab = "general" });
+                    }
+
+                    var uploadsDir = Path.Combine(
+                        _env.WebRootPath ?? System.IO.Path.Combine(_env.ContentRootPath, "wwwroot"),
+                        "logos");
+                    System.IO.Directory.CreateDirectory(uploadsDir);
+
+                    using var stream = System.IO.File.Create(
+                        Path.Combine(uploadsDir, "barangay_logo.png"));
+                    model.LogoFile!.CopyTo(stream);
+                }
+
                 var profileResult = _barangayProfile.Save(new BarangayProfileForm
                 {
                     BarangayName = model.BarangayName,
@@ -4467,7 +4508,11 @@ private static readonly string[] BlotterResolvedStatuses =
                     ContactPhone = model.ContactPhone,
                     OfficeHours = model.OfficeHours,
                     SignatoryName = model.SignatoryName,
-                    SignatoryRole = model.SignatoryRole
+                    SignatoryRole = model.SignatoryRole,
+                    // Only record a logo as configured when one was freshly uploaded,
+                    // so leaving the upload field blank never overwrites an existing
+                    // custom logo with nothing.
+                    LogoFileName = hasNewLogo ? "barangay_logo.png" : null
                 });
 
                 if (!profileResult.Success)

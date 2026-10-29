@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.AspNetCore.Http;
 
 namespace BDIMS.Models
 {
@@ -15,6 +16,19 @@ namespace BDIMS.Models
         public string OfficeHours { get; set; } = "8:00 AM - 5:00 PM (Mon-Fri)";
         public string SignatoryName { get; set; } = "Hon. Celes P. Pondavilla";
         public string SignatoryRole { get; set; } = "Punong Barangay";
+
+        /// <summary>
+        /// Uploaded barangay logo file (posted from the Settings form). Not persisted
+        /// directly; the controller saves it to wwwroot/uploads/barangay_logo.png and
+        /// records the file name in LogoFileName.
+        /// </summary>
+        public IFormFile? LogoFile { get; set; }
+
+        /// <summary>
+        /// File name of the configured barangay logo, or null when no custom logo
+        /// has been uploaded (the default /images/Logo.png is used instead).
+        /// </summary>
+        public string? LogoFileName { get; set; }
 
         // System & Security
         public bool AutoApproveLowRisk { get; set; } = true;
